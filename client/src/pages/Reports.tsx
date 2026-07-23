@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import LoadingSkeleton from '../components/LoadingSkeleton';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatCurrency, colors, card, pageTitle, glass, sectionTitle } from '../styles';
 import {
@@ -8,7 +9,7 @@ import {
 } from 'recharts';
 import {
   DollarSign, TrendingUp, TrendingDown, CreditCard, Receipt, BarChart3,
-  Users, Building2, CalendarDays, UserCheck, BedDouble, Download,
+  Users, Building2, CalendarDays, UserCheck, BedDouble, Download, AlertTriangle,
 } from 'lucide-react';
 
 interface MonthlyRevenue { month: string; revenue: number; tax: number; invoice_count: number; }
@@ -79,15 +80,28 @@ const sourceLabels: Record<string, string> = { walk_in: 'Walk-in', online: 'Onli
 export default function Reports() {
   const { f } = useCurrency();
   const [data, setData] = useState<ReportData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState('overview');
 
-  useEffect(() => { api.get<ReportData>('/reports/summary').then(setData).catch(console.error); }, []);
+  useEffect(() => {
+    api.get<ReportData>('/reports/summary')
+      .then(setData)
+      .catch(e => setError(e.message));
+  }, []);
 
   const handleExportCSV = () => {
     api.download('/export/reports/summary/csv', 'report-summary.csv');
   };
 
-  if (!data) return <div style={{ color: colors.slate }}>Loading...</div>;
+  if (error) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 16, color: colors.slate }}>
+      <AlertTriangle size={48} color={colors.warning} />
+      <div style={{ fontSize: 18, fontWeight: 600 }}>Failed to load reports</div>
+      <div style={{ fontSize: 14 }}>{error}</div>
+    </div>
+  );
+
+  if (!data) return <LoadingSkeleton rows={8} count={2} />;
 
   const profitMargin = data.totalRevenue.total > 0
     ? Math.round((data.netRevenue / data.totalRevenue.total) * 100)

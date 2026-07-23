@@ -1,10 +1,27 @@
 import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 const db = getDb();
 
 const router = Router();
+
+const createRoleSchema = z.object({
+  name: z.string().min(1, 'Role name is required'),
+  permissions: z.array(z.string()).optional().default([]),
+});
+
+const updateRoleSchema = z.object({
+  name: z.string().min(1).optional(),
+  permissions: z.array(z.string()).optional(),
+});
+
+const assignRoleSchema = z.object({
+  user_id: z.string().min(1),
+  role_id: z.string().min(1),
+});
 
 const ALL_PERMISSIONS = [
   'bookings.view', 'bookings.create', 'bookings.edit', 'bookings.cancel',
@@ -34,22 +51,24 @@ router.get('/', (req: AuthRequest, res: Response, next: NextFunction) => {
 });
 
 // Create role
-router.post('/', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/', validate(createRoleSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, permissions } = req.body;
     const id = uuid();
     db.execute('INSERT INTO custom_roles (id, hotel_id, name, permissions) VALUES (?,?,?,?)',
-      [id, req.user!.hotel_id, name, JSON.stringify(permissions || [])]);
+      [id, req.user!.hotel_id, name, JSON.stringify(permissions)]);
     res.json({ id });
   } catch (e: any) { next(e); }
 });
 
 // Update role
-router.put('/:id', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.put('/:id', validate(updateRoleSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const existing = db.queryOne('SELECT * FROM custom_roles WHERE id=? AND hotel_id=?', [req.params.id, req.user!.hotel_id]);
+    if (!existing) return res.status(404).json({ error: 'Role not found' });
     const { name, permissions } = req.body;
     db.execute('UPDATE custom_roles SET name=?, permissions=? WHERE id=? AND hotel_id=?',
-      [name, JSON.stringify(permissions || []), req.params.id, req.user!.hotel_id]);
+      [name ?? existing.name, permissions !== undefined ? JSON.stringify(permissions) : existing.permissions, req.params.id, req.user!.hotel_id]);
     res.json({ success: true });
   } catch (e: any) { next(e); }
 });
@@ -63,7 +82,7 @@ router.delete('/:id', (req: AuthRequest, res: Response, next: NextFunction) => {
 });
 
 // Assign role to user
-router.post('/assign', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/assign', validate(assignRoleSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { user_id, role_id } = req.body;
     db.execute('UPDATE users SET role_id=? WHERE id=?', [role_id, user_id]);

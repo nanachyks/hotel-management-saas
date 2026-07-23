@@ -1,10 +1,27 @@
 import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 const db = getDb();
 
 const router = Router();
+
+const createGroupSchema = z.object({
+  name: z.string().min(1, 'Group name is required'),
+  settings: z.record(z.any()).optional().default({}),
+});
+
+const updateGroupSchema = z.object({
+  name: z.string().min(1).optional(),
+  settings: z.record(z.any()).optional(),
+});
+
+const addMemberSchema = z.object({
+  hotel_id: z.string().min(1),
+  role: z.enum(['owner', 'member', 'affiliate']).optional().default('member'),
+});
 
 // List franchise groups for hotel
 router.get('/groups', (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -20,12 +37,12 @@ router.get('/groups', (req: AuthRequest, res: Response, next: NextFunction) => {
 });
 
 // Create franchise group
-router.post('/groups', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/groups', validate(createGroupSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, settings } = req.body;
     const id = uuid();
     db.execute('INSERT INTO franchise_groups (id, name, parent_hotel_id, settings) VALUES (?,?,?,?)',
-      [id, name, req.user!.hotel_id, JSON.stringify(settings || {})]);
+      [id, name, req.user!.hotel_id, JSON.stringify(settings)]);
     // Add creator as owner
     db.execute('INSERT INTO franchise_members (id, group_id, hotel_id, role) VALUES (?,?,?,?)',
       [uuid(), id, req.user!.hotel_id, 'owner']);
@@ -34,10 +51,11 @@ router.post('/groups', (req: AuthRequest, res: Response, next: NextFunction) => 
 });
 
 // Update group
-router.put('/groups/:id', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.put('/groups/:id', validate(updateGroupSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const existing = db.queryOne('SELECT * FROM franchise_groups WHERE id=?', [req.params.id]);
     const { name, settings } = req.body;
-    db.execute('UPDATE franchise_groups SET name=?, settings=? WHERE id=?', [name, JSON.stringify(settings || {}), req.params.id]);
+    db.execute('UPDATE franchise_groups SET name=?, settings=? WHERE id=?', [name ?? existing?.name, settings !== undefined ? JSON.stringify(settings) : existing?.settings, req.params.id]);
     res.json({ success: true });
   } catch (e: any) { next(e); }
 });
@@ -65,11 +83,11 @@ router.get('/groups/:id/members', (req: AuthRequest, res: Response, next: NextFu
 });
 
 // Add member to group
-router.post('/groups/:id/members', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/groups/:id/members', validate(addMemberSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { hotel_id, role } = req.body;
     db.execute('INSERT OR IGNORE INTO franchise_members (id, group_id, hotel_id, role) VALUES (?,?,?,?)',
-      [uuid(), req.params.id, hotel_id, role || 'member']);
+      [uuid(), req.params.id, hotel_id, role]);
     res.json({ success: true });
   } catch (e: any) { next(e); }
 });

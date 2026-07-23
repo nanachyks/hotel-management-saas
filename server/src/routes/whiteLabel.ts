@@ -1,10 +1,23 @@
 import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 const db = getDb();
 
 const router = Router();
+
+const updateWhiteLabelSchema = z.object({
+  custom_domain: z.string().optional().default(''),
+  favicon_url: z.string().optional().default(''),
+  primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Must be hex color').optional().default('#3b82f6'),
+  logo_url: z.string().optional().default(''),
+  email_from_name: z.string().optional().default(''),
+  email_logo_url: z.string().optional().default(''),
+  custom_css: z.string().optional().default(''),
+  footer_text: z.string().optional().default(''),
+});
 
 // Get white-label settings
 router.get('/', (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -20,7 +33,7 @@ router.get('/', (req: AuthRequest, res: Response, next: NextFunction) => {
 });
 
 // Update white-label settings
-router.put('/', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.put('/', validate(updateWhiteLabelSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { custom_domain, favicon_url, primary_color, logo_url, email_from_name, email_logo_url, custom_css, footer_text } = req.body;
     const existing = db.queryAll('SELECT id FROM white_label_settings WHERE hotel_id=?', [req.user!.hotel_id]);

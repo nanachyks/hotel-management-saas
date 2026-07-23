@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import StatusBadge from '../components/StatusBadge';
+import LoadingSkeleton from '../components/LoadingSkeleton';
 import { useCurrency } from '../context/CurrencyContext';
 import { pageTitle, tableHeader as th, tableCell as td, colors, formatCurrency, glass, card } from '../styles';
 import {
   Building2, CheckCircle2, CircleAlert, TrendingUp,
-  CalendarCheck, LogIn, LogOut, DollarSign, CreditCard,
+  CalendarCheck, LogIn, LogOut, DollarSign, CreditCard, AlertTriangle,
 } from 'lucide-react';
 import { RevenueChart, BookingChart, RoomStatusChart, OccupancyChart } from '../components/DashboardCharts';
 
@@ -38,10 +39,23 @@ const cardIcons: Record<string, React.ReactNode> = {
 export default function Dashboard() {
   const { f, displayCurrency, setDisplayCurrency, currencies } = useCurrency();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { api.get<DashboardData>('/dashboard').then(setData).catch(console.error); }, []);
+  useEffect(() => {
+    api.get<DashboardData>('/dashboard')
+      .then(setData)
+      .catch(e => setError(e.message));
+  }, []);
 
-  if (!data) return <div style={{ color: colors.slate }}>Loading...</div>;
+  if (error) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 16, color: colors.slate }}>
+      <AlertTriangle size={48} color={colors.warning} />
+      <div style={{ fontSize: 18, fontWeight: 600 }}>Failed to load dashboard</div>
+      <div style={{ fontSize: 14 }}>{error}</div>
+    </div>
+  );
+
+  if (!data) return <LoadingSkeleton rows={8} count={2} />;
 
   const cards = [
     { label: 'Total Rooms', value: data.totalRooms, color: '#3b82f6' },

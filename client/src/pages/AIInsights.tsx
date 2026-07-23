@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import LoadingSkeleton from '../components/LoadingSkeleton';
 import { card, pageTitle, sectionTitle, colors, formatCurrency, glass } from '../styles';
 import {
   TrendingUp, TrendingDown, AlertTriangle, Brain, LineChart, DollarSign,
@@ -17,15 +18,26 @@ interface InsightsData {
 
 export default function AIInsights() {
   const [data, setData] = useState<InsightsData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'forecast' | 'pricing' | 'sentiment' | 'upsell'>('overview');
   const [replyInput, setReplyInput] = useState('');
   const [replyResult, setReplyResult] = useState<{ reply: string; matchedKeywords: string[] } | null>(null);
 
   useEffect(() => {
-    api.get<InsightsData>('/ai/insights').then(setData).catch(console.error);
+    api.get<InsightsData>('/ai/insights')
+      .then(setData)
+      .catch(e => setError(e.message));
   }, []);
 
-  if (!data) return <div style={{ color: colors.slate }}>Loading AI insights...</div>;
+  if (error) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 16, color: colors.slate }}>
+      <AlertTriangle size={48} color={colors.warning} />
+      <div style={{ fontSize: 18, fontWeight: 600 }}>Failed to load AI insights</div>
+      <div style={{ fontSize: 14 }}>{error}</div>
+    </div>
+  );
+
+  if (!data) return <LoadingSkeleton rows={6} count={2} />;
 
   const tabs = [
     { key: 'overview', label: 'Overview', icon: <Brain size={16} /> },

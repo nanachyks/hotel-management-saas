@@ -1,15 +1,42 @@
 import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 const db = getDb();
 
 const router = Router();
 
+const createHotelSchema = z.object({
+  name: z.string().min(1, 'Hotel name is required'),
+  address: z.string().optional().default(''),
+  phone: z.string().optional().default(''),
+  email: z.string().email().optional().or(z.literal('')).default(''),
+  currency: z.string().length(3).optional().default('GHS'),
+  timezone: z.string().optional().default('Africa/Accra'),
+});
+
+const updateHotelSchema = z.object({
+  name: z.string().min(1).optional(),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  currency: z.string().length(3).optional(),
+  timezone: z.string().optional(),
+  logo_url: z.string().optional(),
+  status: z.enum(['active', 'inactive', 'maintenance']).optional(),
+});
+
+const addTeamMemberSchema = z.object({
+  email: z.string().email('Valid email required'),
+  role: z.string().optional().default('staff'),
+});
+
 // ── Multi-Property Management ──
 
 // Create a new hotel (property)
-router.post('/hotels', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/hotels', validate(createHotelSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, address, phone, email, currency, timezone } = req.body;
     const id = uuid();
@@ -24,7 +51,7 @@ router.post('/hotels', (req: AuthRequest, res: Response, next: NextFunction) => 
 });
 
 // Update hotel
-router.put('/hotels/:id', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.put('/hotels/:id', validate(updateHotelSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, address, phone, email, currency, timezone, logo_url, status } = req.body;
     db.execute('UPDATE hotels SET name=?, address=?, phone=?, email=?, currency=?, timezone=?, logo_url=?, status=? WHERE id=?',
@@ -62,7 +89,7 @@ router.get('/team', (req: AuthRequest, res: Response, next: NextFunction) => {
 });
 
 // Add team member
-router.post('/team', (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/team', validate(addTeamMemberSchema), (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { email, role } = req.body;
     const user = db.queryAll('SELECT id FROM users WHERE email=?', [email]);
