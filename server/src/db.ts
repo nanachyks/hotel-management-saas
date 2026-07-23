@@ -44,6 +44,24 @@ export function resetDb(newDb: any) {
   db = newDb;
 }
 
+function columnExists(table: string, column: string): boolean {
+  const columns = db.exec(`PRAGMA table_info(${table})`);
+  if (!columns.length) return false;
+  const rows = columns[0].values;
+  return rows.some((row: any[]) => row[1] === column);
+}
+
+function safeAddColumn(table: string, columnDef: string) {
+  const colName = columnDef.split(' ')[0];
+  try {
+    if (!columnExists(table, colName)) {
+      db.run(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+    }
+  } catch {
+    // Table doesn't exist yet — will be created later with the column
+  }
+}
+
 function createTables() {
   db.run(`
     CREATE TABLE IF NOT EXISTS hotels (
@@ -80,10 +98,9 @@ function createTables() {
       UNIQUE(hotel_id, username)
     )
   `);
-  // Add role_id column if missing (migration)
-  try { db.run("ALTER TABLE users ADD COLUMN role_id TEXT DEFAULT NULL REFERENCES custom_roles(id)"); } catch {}
-  try { db.run("ALTER TABLE hotels ADD COLUMN logo_url TEXT DEFAULT ''"); } catch {}
-  try { db.run("ALTER TABLE hotels ADD COLUMN status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive','maintenance'))"); } catch {}
+  safeAddColumn('users', 'role_id TEXT DEFAULT NULL REFERENCES custom_roles(id)');
+  safeAddColumn('hotels', 'logo_url TEXT DEFAULT \'\'');
+  safeAddColumn('hotels', 'status TEXT NOT NULL DEFAULT \'active\' CHECK(status IN (\'active\',\'inactive\',\'maintenance\'))');
   db.run(`
     CREATE TABLE IF NOT EXISTS room_types (
       id TEXT PRIMARY KEY,
@@ -249,35 +266,35 @@ function createTables() {
     )
   `);
 
-  try { db.run("ALTER TABLE hotel_subscriptions ADD COLUMN billing_interval TEXT NOT NULL DEFAULT 'monthly'"); } catch {}
-  try { db.run("ALTER TABLE rooms ADD COLUMN photo TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE guests ADD COLUMN whatsapp TEXT DEFAULT ''"); } catch {}
-  try { db.run("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0"); } catch {}
-  try { db.run("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'receptionist'"); } catch {}
-  try { db.run("ALTER TABLE users ADD COLUMN hotel_id TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE users ADD COLUMN invitation_token TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE users ADD COLUMN invitation_accepted INTEGER NOT NULL DEFAULT 1"); } catch {}
-  try { db.run("ALTER TABLE room_types ADD COLUMN hotel_id TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE rooms ADD COLUMN hotel_id TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE guests ADD COLUMN hotel_id TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE bookings ADD COLUMN hotel_id TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE services ADD COLUMN hotel_id TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE invoices ADD COLUMN hotel_id TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE rooms ADD COLUMN amenities TEXT DEFAULT ''"); } catch {}
-  try { db.run("ALTER TABLE rooms ADD COLUMN notes TEXT DEFAULT ''"); } catch {}
-  try { db.run("ALTER TABLE rooms ADD COLUMN price REAL DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE rooms ADD COLUMN capacity INTEGER DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE bookings ADD COLUMN actual_check_in TEXT DEFAULT NULL"); } catch {}
-  try { db.run("ALTER TABLE bookings ADD COLUMN actual_check_out TEXT DEFAULT NULL"); } catch {}
-  try { db.run("UPDATE users SET role = 'owner' WHERE role = 'admin'"); } catch {}
-  try { db.run("UPDATE users SET role = 'receptionist' WHERE role = 'staff'"); } catch {}
-  try { db.run("UPDATE rooms SET status = 'out_of_service' WHERE status = 'maintenance'"); } catch {}
-  try { db.run("ALTER TABLE bookings ADD COLUMN source TEXT NOT NULL DEFAULT 'walk_in'"); } catch {}
-  try { db.run("UPDATE bookings SET status = 'pending' WHERE status = 'confirmed'"); } catch {}
-  try { db.run("ALTER TABLE invoices ADD COLUMN discount REAL NOT NULL DEFAULT 0"); } catch {}
-  try { db.run("ALTER TABLE invoices ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0"); } catch {}
-  try { db.run("ALTER TABLE invoices ADD COLUMN deposit REAL NOT NULL DEFAULT 0"); } catch {}
-  try { db.run("ALTER TABLE invoices ADD COLUMN notes TEXT DEFAULT ''"); } catch {}
+  safeAddColumn('hotel_subscriptions', 'billing_interval TEXT NOT NULL DEFAULT \'monthly\'');
+  safeAddColumn('rooms', 'photo TEXT DEFAULT NULL');
+  safeAddColumn('guests', 'whatsapp TEXT DEFAULT \'\'');
+  safeAddColumn('users', 'email_verified INTEGER NOT NULL DEFAULT 0');
+  safeAddColumn('users', 'role TEXT NOT NULL DEFAULT \'receptionist\'');
+  safeAddColumn('users', 'hotel_id TEXT DEFAULT NULL');
+  safeAddColumn('users', 'invitation_token TEXT DEFAULT NULL');
+  safeAddColumn('users', 'invitation_accepted INTEGER NOT NULL DEFAULT 1');
+  safeAddColumn('room_types', 'hotel_id TEXT DEFAULT NULL');
+  safeAddColumn('rooms', 'hotel_id TEXT DEFAULT NULL');
+  safeAddColumn('guests', 'hotel_id TEXT DEFAULT NULL');
+  safeAddColumn('bookings', 'hotel_id TEXT DEFAULT NULL');
+  safeAddColumn('services', 'hotel_id TEXT DEFAULT NULL');
+  safeAddColumn('invoices', 'hotel_id TEXT DEFAULT NULL');
+  safeAddColumn('rooms', 'amenities TEXT DEFAULT \'\'');
+  safeAddColumn('rooms', 'notes TEXT DEFAULT \'\'');
+  safeAddColumn('rooms', 'price REAL DEFAULT NULL');
+  safeAddColumn('rooms', 'capacity INTEGER DEFAULT NULL');
+  safeAddColumn('bookings', 'actual_check_in TEXT DEFAULT NULL');
+  safeAddColumn('bookings', 'actual_check_out TEXT DEFAULT NULL');
+  try { db.run("UPDATE users SET role = 'owner' WHERE role = 'admin'"); } catch (e: any) { /* data migration - safe to ignore if column missing */ }
+  try { db.run("UPDATE users SET role = 'receptionist' WHERE role = 'staff'"); } catch (e: any) { /* data migration - safe to ignore if column missing */ }
+  try { db.run("UPDATE rooms SET status = 'out_of_service' WHERE status = 'maintenance'"); } catch (e: any) { /* data migration - safe to ignore if column missing */ }
+  safeAddColumn('bookings', 'source TEXT NOT NULL DEFAULT \'walk_in\'');
+  try { db.run("UPDATE bookings SET status = 'pending' WHERE status = 'confirmed'"); } catch (e: any) { /* data migration - safe to ignore if column missing */ }
+  safeAddColumn('invoices', 'discount REAL NOT NULL DEFAULT 0');
+  safeAddColumn('invoices', 'tax_amount REAL NOT NULL DEFAULT 0');
+  safeAddColumn('invoices', 'deposit REAL NOT NULL DEFAULT 0');
+  safeAddColumn('invoices', 'notes TEXT DEFAULT \'\'');
 
   db.run(`
     CREATE TABLE IF NOT EXISTS payments (

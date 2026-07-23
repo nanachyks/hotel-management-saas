@@ -11,6 +11,11 @@ import { servicesRouter } from '../routes/services.js';
 import { invoicesRouter } from '../routes/invoices.js';
 import { dashboardRouter } from '../routes/dashboard.js';
 import { exportRouter } from '../routes/export.js';
+import corporateRouter from '../routes/corporate.js';
+import franchiseRouter from '../routes/franchise.js';
+import rolesRouter from '../routes/roles.js';
+import apiKeysRouter from '../routes/apiKeys.js';
+import whiteLabelRouter from '../routes/whiteLabel.js';
 import { errorHandler } from '../middleware/errorHandler.js';
 
 export function createApp() {
@@ -28,6 +33,11 @@ export function createApp() {
   app.use('/api/dashboard', authenticate, dashboardRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/export', authenticate, exportRouter);
+  app.use('/api/corporate', authenticate, corporateRouter);
+  app.use('/api/franchise', authenticate, franchiseRouter);
+  app.use('/api/roles', authenticate, rolesRouter);
+  app.use('/api/api-keys', authenticate, apiKeysRouter);
+  app.use('/api/white-label', authenticate, whiteLabelRouter);
 
   app.use(errorHandler);
   return app;

@@ -1,6 +1,7 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
+import { AuthRequest } from '../middleware/auth.js';
 const db = getDb();
 
 const router = Router();
@@ -8,7 +9,7 @@ const router = Router();
 // ── Multi-Property Management ──
 
 // Create a new hotel (property)
-router.post('/hotels', (req: Request, res: Response, next: NextFunction) => {
+router.post('/hotels', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, address, phone, email, currency, timezone } = req.body;
     const id = uuid();
@@ -17,13 +18,13 @@ router.post('/hotels', (req: Request, res: Response, next: NextFunction) => {
       [id, name, `${domain}-${id.slice(0, 6)}`, address || '', phone || '', email || '', currency || 'GHS', timezone || 'Africa/Accra']);
     // Add creator as owner
     db.execute('INSERT INTO hotel_members (id, hotel_id, user_id, role) VALUES (?,?,?,?)',
-      [uuid(), id, (req as any).userId, 'owner']);
+      [uuid(), id, req.user!.id, 'owner']);
     res.json({ id, name });
   } catch (e: any) { next(e); }
 });
 
 // Update hotel
-router.put('/hotels/:id', (req: Request, res: Response, next: NextFunction) => {
+router.put('/hotels/:id', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, address, phone, email, currency, timezone, logo_url, status } = req.body;
     db.execute('UPDATE hotels SET name=?, address=?, phone=?, email=?, currency=?, timezone=?, logo_url=?, status=? WHERE id=?',
@@ -33,7 +34,7 @@ router.put('/hotels/:id', (req: Request, res: Response, next: NextFunction) => {
 });
 
 // List all hotels user has access to (for property switcher)
-router.get('/hotels', (req: Request, res: Response, next: NextFunction) => {
+router.get('/hotels', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const hotels = db.queryAll(`
       SELECT h.*, hm.role as membership_role
@@ -41,13 +42,13 @@ router.get('/hotels', (req: Request, res: Response, next: NextFunction) => {
       JOIN hotels h ON h.id=hm.hotel_id
       WHERE hm.user_id=?
       ORDER BY h.name
-    `, [(req as any).userId]);
+    `, [req.user!.id]);
     res.json(hotels);
   } catch (e: any) { next(e); }
 });
 
 // Team members for current hotel
-router.get('/team', (req: Request, res: Response, next: NextFunction) => {
+router.get('/team', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const members = db.queryAll(`
       SELECT u.id, u.username, u.email, u.role, u.role_id,
@@ -55,29 +56,29 @@ router.get('/team', (req: Request, res: Response, next: NextFunction) => {
       FROM hotel_members hm
       JOIN users u ON u.id=hm.user_id
       WHERE hm.hotel_id=?
-    `, [req.hotelId]);
+    `, [req.user!.hotel_id]);
     res.json(members);
   } catch (e: any) { next(e); }
 });
 
 // Add team member
-router.post('/team', (req: Request, res: Response, next: NextFunction) => {
+router.post('/team', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { email, role } = req.body;
     const user = db.queryAll('SELECT id FROM users WHERE email=?', [email]);
     if (!user.length) return res.status(404).json({ error: 'User not found' });
-    const existing = db.queryAll('SELECT id FROM hotel_members WHERE hotel_id=? AND user_id=?', [req.hotelId, user[0].id]);
+    const existing = db.queryAll('SELECT id FROM hotel_members WHERE hotel_id=? AND user_id=?', [req.user!.hotel_id, user[0].id]);
     if (existing.length) return res.status(400).json({ error: 'User already a member' });
     db.execute('INSERT INTO hotel_members (id, hotel_id, user_id, role) VALUES (?,?,?,?)',
-      [uuid(), req.hotelId, user[0].id, role || 'staff']);
+      [uuid(), req.user!.hotel_id, user[0].id, role || 'staff']);
     res.json({ success: true });
   } catch (e: any) { next(e); }
 });
 
 // Remove team member
-router.delete('/team/:userId', (req: Request, res: Response, next: NextFunction) => {
+router.delete('/team/:userId', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    db.execute('DELETE FROM hotel_members WHERE hotel_id=? AND user_id=?', [req.hotelId, req.params.userId]);
+    db.execute('DELETE FROM hotel_members WHERE hotel_id=? AND user_id=?', [req.user!.hotel_id, req.params.userId]);
     res.json({ success: true });
   } catch (e: any) { next(e); }
 });

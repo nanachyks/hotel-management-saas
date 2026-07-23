@@ -1,39 +1,40 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
+import { AuthRequest } from '../middleware/auth.js';
 const db = getDb();
 
 const router = Router();
 
 // List franchise groups for hotel
-router.get('/groups', (req: Request, res: Response, next: NextFunction) => {
+router.get('/groups', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const groups = db.queryAll(`
       SELECT fg.*, (SELECT COUNT(*) FROM franchise_members WHERE group_id=fg.id) as member_count
       FROM franchise_groups fg
       WHERE fg.parent_hotel_id=? OR fg.id IN (SELECT group_id FROM franchise_members WHERE hotel_id=?)
       ORDER BY fg.name
-    `, [req.hotelId, req.hotelId]);
+    `, [req.user!.hotel_id, req.user!.hotel_id]);
     res.json(groups);
   } catch (e: any) { next(e); }
 });
 
 // Create franchise group
-router.post('/groups', (req: Request, res: Response, next: NextFunction) => {
+router.post('/groups', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, settings } = req.body;
     const id = uuid();
     db.execute('INSERT INTO franchise_groups (id, name, parent_hotel_id, settings) VALUES (?,?,?,?)',
-      [id, name, req.hotelId, JSON.stringify(settings || {})]);
+      [id, name, req.user!.hotel_id, JSON.stringify(settings || {})]);
     // Add creator as owner
     db.execute('INSERT INTO franchise_members (id, group_id, hotel_id, role) VALUES (?,?,?,?)',
-      [uuid(), id, req.hotelId, 'owner']);
+      [uuid(), id, req.user!.hotel_id, 'owner']);
     res.json({ id });
   } catch (e: any) { next(e); }
 });
 
 // Update group
-router.put('/groups/:id', (req: Request, res: Response, next: NextFunction) => {
+router.put('/groups/:id', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, settings } = req.body;
     db.execute('UPDATE franchise_groups SET name=?, settings=? WHERE id=?', [name, JSON.stringify(settings || {}), req.params.id]);
@@ -42,7 +43,7 @@ router.put('/groups/:id', (req: Request, res: Response, next: NextFunction) => {
 });
 
 // Delete group
-router.delete('/groups/:id', (req: Request, res: Response, next: NextFunction) => {
+router.delete('/groups/:id', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     db.execute('DELETE FROM franchise_members WHERE group_id=?', [req.params.id]);
     db.execute('DELETE FROM franchise_groups WHERE id=?', [req.params.id]);
@@ -51,7 +52,7 @@ router.delete('/groups/:id', (req: Request, res: Response, next: NextFunction) =
 });
 
 // Members of a group
-router.get('/groups/:id/members', (req: Request, res: Response, next: NextFunction) => {
+router.get('/groups/:id/members', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const members = db.queryAll(`
       SELECT fm.*, h.name as hotel_name
@@ -64,7 +65,7 @@ router.get('/groups/:id/members', (req: Request, res: Response, next: NextFuncti
 });
 
 // Add member to group
-router.post('/groups/:id/members', (req: Request, res: Response, next: NextFunction) => {
+router.post('/groups/:id/members', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { hotel_id, role } = req.body;
     db.execute('INSERT OR IGNORE INTO franchise_members (id, group_id, hotel_id, role) VALUES (?,?,?,?)',
@@ -74,7 +75,7 @@ router.post('/groups/:id/members', (req: Request, res: Response, next: NextFunct
 });
 
 // Remove member
-router.delete('/members/:memberId', (req: Request, res: Response, next: NextFunction) => {
+router.delete('/members/:memberId', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     db.execute('DELETE FROM franchise_members WHERE id=?', [req.params.memberId]);
     res.json({ success: true });
@@ -82,13 +83,13 @@ router.delete('/members/:memberId', (req: Request, res: Response, next: NextFunc
 });
 
 // Cross-property report aggregation
-router.get('/consolidated', (req: Request, res: Response, next: NextFunction) => {
+router.get('/consolidated', (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const groups = db.queryAll(`
       SELECT fg.* FROM franchise_groups fg
       JOIN franchise_members fm ON fm.group_id=fg.id
       WHERE fm.hotel_id=? AND fm.role='owner'
-    `, [req.hotelId]);
+    `, [req.user!.hotel_id]);
     const result: any[] = [];
     for (const g of groups) {
       const members = db.queryAll('SELECT hotel_id FROM franchise_members WHERE group_id=?', [g.id]);
