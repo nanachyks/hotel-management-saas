@@ -41,10 +41,19 @@ import rolesRouter from './routes/roles.js';
 import apiKeysRouter from './routes/apiKeys.js';
 import whiteLabelRouter from './routes/whiteLabel.js';
 import enterpriseRouter from './routes/enterprise.js';
+import { channelsRouter } from './routes/channels.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Only trust X-Forwarded-For when explicitly configured (e.g. behind a known
+// reverse proxy/load balancer). Left unset, req.ip is the raw socket address,
+// which a client cannot spoof — this is what login rate-limiting relies on.
+if (process.env.TRUST_PROXY) {
+  const trustProxy = Number(process.env.TRUST_PROXY);
+  app.set('trust proxy', Number.isNaN(trustProxy) ? process.env.TRUST_PROXY : trustProxy);
+}
 
 const corsOrigins = process.env.CORS_ORIGINS || 'http://localhost:5173';
 app.use(cors({
@@ -99,6 +108,7 @@ app.use('/api/roles', authenticate, rolesRouter);
 app.use('/api/api-keys', authenticate, apiKeysRouter);
 app.use('/api/white-label', authenticate, whiteLabelRouter);
 app.use('/api/enterprise', authenticate, enterpriseRouter);
+app.use('/api/channels', authenticate, channelsRouter);
 
 app.use(errorHandler);
 

@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'hotel-ease-secret-key-2026';
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
+const JWT_SECRET: string = process.env.JWT_SECRET;
 
 const roleHierarchy: Record<string, number> = {
   housekeeping: 1,
@@ -22,11 +25,11 @@ export const ROLES = {
 } as const;
 
 export interface AuthRequest extends Request {
-  user?: { id: string; username: string; role: string; name: string; hotel_id: string };
+  user?: { id: string; username: string; role: string; name: string; email: string; hotel_id: string };
 }
 
-export function generateToken(user: { id: string; username: string; role: string; name: string; hotel_id: string }) {
-  return jwt.sign({ id: user.id, username: user.username, role: user.role, name: user.name, hotel_id: user.hotel_id }, JWT_SECRET, { expiresIn: '24h' });
+export function generateToken(user: { id: string; username: string; role: string; name: string; email: string; hotel_id: string }) {
+  return jwt.sign({ id: user.id, username: user.username, role: user.role, name: user.name, email: user.email, hotel_id: user.hotel_id }, JWT_SECRET, { expiresIn: '24h' });
 }
 
 export function generateInvitationToken(payload: { hotel_id: string; email: string; role: string }) {
@@ -41,7 +44,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   try {
     const token = header.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    req.user = { id: decoded.id, username: decoded.username, role: decoded.role, name: decoded.name, hotel_id: decoded.hotel_id };
+    req.user = { id: decoded.id, username: decoded.username, role: decoded.role, name: decoded.name, email: decoded.email, hotel_id: decoded.hotel_id };
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });

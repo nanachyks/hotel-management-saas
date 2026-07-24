@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getDb } from '../db.js';
 import { generateToken, authenticate, AuthRequest } from '../middleware/auth.js';
-import { sendEmailVerification } from '../services/email.js';
+import { sendEmailVerification, sendPasswordReset } from '../services/email.js';
 
 export const authRouter = Router();
 const db = getDb();
@@ -15,7 +15,10 @@ const MAX_LOGIN_ATTEMPTS = 8;
 const LOGIN_WINDOW_MINUTES = 15;
 
 function getClientIp(req: Request): string {
-  return (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+  // req.ip already accounts for the app's `trust proxy` setting, so it only
+  // reflects X-Forwarded-For when that header comes from a trusted hop —
+  // unlike reading the header directly, it can't be spoofed by the client.
+  return req.ip || 'unknown';
 }
 
 function isRateLimited(username: string, ip: string): boolean {
@@ -176,10 +179,10 @@ authRouter.post('/forgot-password', (req: Request, res: Response) => {
     [uuid(), user.id, resetToken, expiresAt]
   );
 
-  // Since no email service, return the token so the UI can use it
+  sendPasswordReset(email, { name: user.name, token: resetToken });
+
   res.json({
     message: 'If the email exists, a reset link has been generated.',
-    resetToken,
   });
 });
 

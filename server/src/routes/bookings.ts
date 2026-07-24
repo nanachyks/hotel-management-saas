@@ -311,11 +311,11 @@ bookingsRouter.post('/:id/services', (req: AuthRequest, res: Response) => {
 });
 
 bookingsRouter.delete('/:id/services/:serviceId', (req: AuthRequest, res: Response) => {
-  const existing = db.queryOne('SELECT * FROM booking_services WHERE id = ?', [req.params.serviceId]);
-  if (!existing) return res.status(404).json({ error: 'Booking service not found' });
-
   const booking = db.queryOne('SELECT * FROM bookings WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+  const existing = db.queryOne('SELECT * FROM booking_services WHERE id = ? AND booking_id = ?', [req.params.serviceId, req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'Booking service not found' });
 
   db.execute('DELETE FROM booking_services WHERE id = ?', [req.params.serviceId]);
 

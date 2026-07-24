@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { beforeAll, afterEach } from 'vitest';
 import { initTestDb, resetDb, getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';

@@ -5,7 +5,6 @@ import { colors, input, btn } from '../styles';
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
-  const [resetToken, setResetToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -23,7 +22,6 @@ export default function ForgotPassword() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Request failed');
       setMessage(data.message);
-      if (data.resetToken) setResetToken(data.resetToken);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -69,21 +67,6 @@ export default function ForgotPassword() {
             border: '1px solid rgba(34, 197, 94, 0.2)',
           }}>
             {message}
-          </div>
-        )}
-
-        {resetToken && (
-          <div style={{
-            background: 'rgba(59, 130, 246, 0.1)', color: colors.primary,
-            padding: '14px', borderRadius: 8, fontSize: 13, marginBottom: 16,
-            border: '1px solid rgba(59, 130, 246, 0.2)',
-            wordBreak: 'break-all',
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 14 }}>Reset Token:</div>
-            {resetToken}
-            <div style={{ marginTop: 8, fontSize: 13, color: colors.slate }}>
-              Copy this token and go to the <Link to="/reset-password" style={{ color: colors.primary }}>reset password</Link> page.
-            </div>
           </div>
         )}
 

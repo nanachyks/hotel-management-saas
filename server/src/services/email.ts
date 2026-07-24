@@ -199,6 +199,58 @@ export async function sendEmailVerification(to: string, data: {
   }
 }
 
+function passwordResetHtml(data: {
+  name: string;
+  token: string;
+}): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a2e; color: #e0e0e0; border-radius: 12px; overflow: hidden;">
+      <div style="background: linear-gradient(135deg, #6c63ff, #e94560); padding: 32px; text-align: center;">
+        <h1 style="color: #fff; margin: 0; font-size: 24px;">HotelEase</h1>
+        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0;">Reset Your Password</p>
+      </div>
+      <div style="padding: 32px;">
+        <h2 style="color: #fff; font-size: 20px;">Hi ${data.name},</h2>
+        <p style="line-height: 1.6;">We received a request to reset your password. Click below to choose a new one.</p>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${data.token}"
+             style="display: inline-block; padding: 14px 36px; border-radius: 10px; text-decoration: none;
+                    background: linear-gradient(135deg, #6c63ff, #e94560); color: #fff; font-size: 16px; font-weight: 600;">
+            Reset Password
+          </a>
+        </div>
+        <p style="color: #666; font-size: 13px;">Or copy this link into your browser:</p>
+        <p style="color: #6c63ff; font-size: 13px; word-break: break-all;">${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${data.token}</p>
+        <p style="margin-top: 24px; color: #666; font-size: 12px;">This link expires in 1 hour. If you did not request a password reset, ignore this email.</p>
+      </div>
+    </div>
+  `;
+}
+
+export async function sendPasswordReset(to: string, data: {
+  name: string;
+  token: string;
+}): Promise<void> {
+  const html = passwordResetHtml(data);
+  const subject = 'Reset Your Password - HotelEase';
+
+  if (!hasEmailConfig()) {
+    logEmail(to, subject, html);
+    return;
+  }
+
+  try {
+    await resend!.emails.send({
+      from: fromEmail,
+      to,
+      subject,
+      html,
+    });
+  } catch (err) {
+    console.error('[EMAIL] Failed to send password reset:', err);
+  }
+}
+
 export async function sendCheckOutReceipt(to: string, data: {
   guestName: string;
   roomNumber: string;
