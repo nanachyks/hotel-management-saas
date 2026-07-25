@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Layout from '../components/Layout';
 
@@ -36,14 +36,20 @@ function renderLayout() {
   );
 }
 
+function expandSidebar() {
+  fireEvent.mouseEnter(screen.getByRole('navigation'));
+}
+
 describe('Layout', () => {
   it('renders sidebar with brand name', () => {
     renderLayout();
+    expandSidebar();
     expect(screen.getByTestId('brand-name')).toHaveTextContent('HotelEase');
   });
 
   it('renders all navigation items for admin', () => {
     renderLayout();
+    expandSidebar();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByText('Calendar')).toBeInTheDocument();
     expect(screen.getByText('Rooms')).toBeInTheDocument();
@@ -57,24 +63,28 @@ describe('Layout', () => {
   it('shows Users nav item only for admin role', () => {
     mockRole = 'admin';
     renderLayout();
+    expandSidebar();
     expect(screen.getByText('Users')).toBeInTheDocument();
   });
 
   it('shows Users nav item for owner role', () => {
     mockRole = 'owner';
     renderLayout();
+    expandSidebar();
     expect(screen.getByText('Users')).toBeInTheDocument();
   });
 
   it('hides Users nav item for receptionist role', () => {
     mockRole = 'receptionist';
     renderLayout();
+    expandSidebar();
     expect(screen.queryByText('Users')).not.toBeInTheDocument();
   });
 
   it('hides Invoices and Services for receptionist role', () => {
     mockRole = 'receptionist';
     renderLayout();
+    expandSidebar();
     expect(screen.queryByText('Invoices')).not.toBeInTheDocument();
     expect(screen.queryByText('Services')).not.toBeInTheDocument();
   });
@@ -82,6 +92,7 @@ describe('Layout', () => {
   it('shows Invoices for accountant role', () => {
     mockRole = 'accountant';
     renderLayout();
+    expandSidebar();
     expect(screen.getByText('Invoices')).toBeInTheDocument();
     expect(screen.queryByText('Services')).not.toBeInTheDocument();
     expect(screen.queryByText('Guests')).not.toBeInTheDocument();
@@ -90,6 +101,7 @@ describe('Layout', () => {
   it('shows only Rooms and Calendar for housekeeping role', () => {
     mockRole = 'housekeeping';
     renderLayout();
+    expandSidebar();
     expect(screen.getByText('Rooms')).toBeInTheDocument();
     expect(screen.getByText('Calendar')).toBeInTheDocument();
     expect(screen.queryByText('Invoices')).not.toBeInTheDocument();
@@ -101,13 +113,14 @@ describe('Layout', () => {
   it('displays user name and role', () => {
     mockRole = 'admin';
     renderLayout();
+    expandSidebar();
     expect(screen.getByText('Admin User')).toBeInTheDocument();
     expect(screen.getByText('admin')).toBeInTheDocument();
   });
 
   it('renders Sign Out button', () => {
     renderLayout();
-    expect(screen.getByText('Sign Out')).toBeInTheDocument();
+    expect(screen.getByText('✕')).toBeInTheDocument();
   });
 
   it('renders child route content', () => {

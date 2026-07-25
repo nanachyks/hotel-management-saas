@@ -111,8 +111,8 @@ export default function Payroll() {
                       <td style={{ padding: '10px 16px' }}>
                         <span style={{
                           padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-                          background: p.status === 'closed' ? 'rgba(34,197,94,0.15)' : p.status === 'processing' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
-                          color: p.status === 'closed' ? '#22c55e' : p.status === 'processing' ? '#f59e0b' : '#3b82f6',
+                          background: p.status === 'closed' ? 'rgba(34,197,94,0.15)' : p.status === 'processing' ? 'rgba(245,158,11,0.15)' : 'var(--color-primary-015, rgba(59,130,246,0.15))',
+                          color: p.status === 'closed' ? '#22c55e' : p.status === 'processing' ? '#f59e0b' : 'var(--color-primary, #3b82f6)',
                         }}>{p.status}</span>
                       </td>
                       <td style={{ padding: '10px 16px', textAlign: 'right' }}>
@@ -236,7 +236,7 @@ export default function Payroll() {
           </div>
           {deductions.map(d => (
             <div key={d.id} style={{ ...glass, padding: '12px 18px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div><span style={{ fontWeight: 600 }}>{d.name}</span> <span style={{ color: colors.slate, marginLeft: 8 }}>{d.value}{d.type === 'percentage' ? '%' : ''}</span> {d.is_mandatory ? <span style={{ color: '#3b82f6', fontSize: 12 }}>Mandatory</span> : null}</div>
+              <div><span style={{ fontWeight: 600 }}>{d.name}</span> <span style={{ color: colors.slate, marginLeft: 8 }}>{d.value}{d.type === 'percentage' ? '%' : ''}</span> {d.is_mandatory ? <span style={{ color: colors.primary, fontSize: 12 }}>Mandatory</span> : null}</div>
               <button onClick={() => removeDeduction(d.id)} style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 13 }}>Remove</button>
             </div>
           ))}

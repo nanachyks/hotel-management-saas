@@ -13,7 +13,7 @@ let svc2Id: string;
 let rt1Id: string;
 
 beforeEach(async () => {
-  const ids = seedTestData();
+  const ids = await seedTestData();
   guestId = ids.guestId;
   roomId = ids.room1Id;
   svc1Id = ids.svc1Id;
@@ -48,7 +48,7 @@ describe('POST /api/bookings', () => {
     expect(res.body).toHaveProperty('room_number');
 
     const db = getDb();
-    const invoice = db.queryOne('SELECT * FROM invoices WHERE booking_id = ?', [res.body.id]);
+    const invoice = await db.queryOne('SELECT * FROM invoices WHERE booking_id = ?', [res.body.id]);
     expect(invoice).not.toBeNull();
     expect(invoice.amount).toBe(900);
   });
@@ -116,7 +116,7 @@ describe('PUT /api/bookings/:id', () => {
     expect(res.body.status).toBe('checked_in');
 
     const db = getDb();
-    const room = db.queryOne('SELECT status FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryOne('SELECT status FROM rooms WHERE id = ?', [roomId]);
     expect(room.status).toBe('occupied');
   });
 
@@ -140,10 +140,10 @@ describe('PUT /api/bookings/:id', () => {
     expect(res.body.status).toBe('checked_out');
 
     const db = getDb();
-    const room = db.queryOne('SELECT status FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryOne('SELECT status FROM rooms WHERE id = ?', [roomId]);
     expect(room.status).toBe('available');
 
-    const invoice = db.queryOne('SELECT status FROM invoices WHERE booking_id = ?', [bookingId]);
+    const invoice = await db.queryOne('SELECT status FROM invoices WHERE booking_id = ?', [bookingId]);
     expect(invoice.status).toBe('paid');
   });
 
@@ -162,7 +162,7 @@ describe('PUT /api/bookings/:id', () => {
     expect(res.body.status).toBe('cancelled');
 
     const db = getDb();
-    const room = db.queryOne('SELECT status FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryOne('SELECT status FROM rooms WHERE id = ?', [roomId]);
     expect(room.status).toBe('available');
   });
 });
@@ -183,7 +183,7 @@ describe('POST /api/bookings/:id/services', () => {
     expect(res.body.service_name).toBe('Breakfast');
 
     const db = getDb();
-    const booking = db.queryOne('SELECT total_amount FROM bookings WHERE id = ?', [bookingId]);
+    const booking = await db.queryOne('SELECT total_amount FROM bookings WHERE id = ?', [bookingId]);
     expect(booking.total_amount).toBe(700); // 2 nights * 300 + 2 * 50
   });
 
@@ -221,7 +221,7 @@ describe('DELETE /api/bookings/:id/services/:serviceId', () => {
     expect(res.status).toBe(200);
 
     const db = getDb();
-    const booking = db.queryOne('SELECT total_amount FROM bookings WHERE id = ?', [bookingId]);
+    const booking = await db.queryOne('SELECT total_amount FROM bookings WHERE id = ?', [bookingId]);
     expect(booking.total_amount).toBe(1200); // 4 nights * 300, service removed
   });
 });

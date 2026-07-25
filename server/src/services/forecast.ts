@@ -11,19 +11,23 @@ function dayOfWeek(dateStr: string): number {
   return new Date(dateStr).getDay();
 }
 
-export function getOccupancyForecast(hotelId: string, days: number = 30) {
-  const totalRooms = db.queryOne('SELECT COUNT(*) as count FROM rooms WHERE hotel_id = ?', [hotelId]).count;
+function toDateStr(v: any): string {
+  if (!v) return '';
+  return v instanceof Date ? v.toISOString().split('T')[0] : String(v).split('T')[0];
+}
+
+export async function getOccupancyForecast(hotelId: string, days: number = 30) {
+  const totalRooms = (await db.queryOne('SELECT COUNT(*) as count FROM rooms WHERE hotel_id = ?', [hotelId])).count;
   if (!totalRooms) return { forecast: [], avgOccupancy: 0 };
 
   const ninetyDaysAgo = daysAhead(-90);
-  const historical = db.queryAll(`
+  const historical = await db.queryAll(`
     SELECT check_in_date, check_out_date, status FROM bookings
     WHERE hotel_id = ? AND (check_in_date >= ? OR check_out_date >= ?)
     ORDER BY check_in_date ASC
   `, [hotelId, ninetyDaysAgo, ninetyDaysAgo]);
 
   const dailyOccupancy: Record<string, { occupied: number; total: number }> = {};
-  const rooms = db.queryAll('SELECT id FROM rooms WHERE hotel_id = ?', [hotelId]);
 
   for (let i = -90; i < days; i++) {
     const date = daysAhead(i);
@@ -91,8 +95,8 @@ export function getOccupancyForecast(hotelId: string, days: number = 30) {
   return { forecast, avgOccupancy: Math.round(avgOccupancy) };
 }
 
-export function getPricingSuggestions(hotelId: string) {
-  const roomTypes = db.queryAll(`
+export async function getPricingSuggestions(hotelId: string) {
+  const roomTypes = await db.queryAll(`
     SELECT rt.id, rt.name, rt.base_price, COUNT(r.id) as room_count,
       COALESCE(SUM(CASE WHEN b.status IN ('confirmed','checked_in','checked_out') THEN 1 ELSE 0 END), 0) as booked
     FROM room_types rt
@@ -103,7 +107,7 @@ export function getPricingSuggestions(hotelId: string) {
     GROUP BY rt.id
   `, [daysAhead(30), daysAhead(-1), hotelId]);
 
-  const occupancyForecast = getOccupancyForecast(hotelId, 30);
+  const occupancyForecast = await getOccupancyForecast(hotelId, 30);
   const overallDemand = occupancyForecast.avgOccupancy;
 
   return roomTypes.map((rt: any) => {
@@ -133,9 +137,9 @@ export function getPricingSuggestions(hotelId: string) {
   });
 }
 
-export function getRevenueForecast(hotelId: string, months: number = 3) {
-  const historicalRevenue = db.queryAll(`
-    SELECT strftime('%Y-%m', check_out_date) as month, COALESCE(SUM(total_amount), 0) as revenue
+export async function getRevenueForecast(hotelId: string, months: number = 3) {
+  const historicalRevenue = await db.queryAll(`
+    SELECT TO_CHAR(check_out_date::date, 'YYYY-MM') as month, COALESCE(SUM(total_amount), 0) as revenue
     FROM bookings WHERE status = 'checked_out' AND hotel_id = ?
     GROUP BY month ORDER BY month ASC
   `, [hotelId]);
@@ -172,7 +176,7 @@ export function getRevenueForecast(hotelId: string, months: number = 3) {
   return { forecast, totalProjected: Math.round(totalProjected), lastMonthRevenue, trend: slope >= 0 ? 'up' : 'down' };
 }
 
-export function getSentimentAnalysis(hotelId: string) {
+export async function getSentimentAnalysis(hotelId: string) {
   const keywords: Record<string, { positive: string[]; negative: string[] }> = {
     default: {
       positive: ['great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'beautiful', 'clean', 'comfortable', 'friendly', 'helpful', 'quiet', 'spacious', 'nice', 'good', 'perfect', 'enjoy', 'happy', 'satisfied'],
@@ -182,14 +186,14 @@ export function getSentimentAnalysis(hotelId: string) {
 
   const feedbackSources: { text: string; source: string; date: string }[] = [];
 
-  const rsRequests = db.queryAll("SELECT description, created_at FROM room_service_requests WHERE hotel_id = ?", [hotelId]);
+  const rsRequests = await db.queryAll("SELECT description, created_at FROM room_service_requests WHERE hotel_id = ?", [hotelId]);
   for (const r of rsRequests) {
-    feedbackSources.push({ text: r.description, source: 'Room Service', date: r.created_at?.split('T')[0] || '' });
+    feedbackSources.push({ text: r.description, source: 'Room Service', date: toDateStr(r.created_at) });
   }
 
-  const maintenanceRequests = db.queryAll("SELECT description, created_at FROM maintenance_requests WHERE hotel_id = ?", [hotelId]);
+  const maintenanceRequests = await db.queryAll("SELECT description, created_at FROM maintenance_requests WHERE hotel_id = ?", [hotelId]);
   for (const m of maintenanceRequests) {
-    feedbackSources.push({ text: m.description, source: 'Maintenance', date: m.created_at?.split('T')[0] || '' });
+    feedbackSources.push({ text: m.description, source: 'Maintenance', date: toDateStr(m.created_at) });
   }
 
   const results = feedbackSources.map(fs => {
@@ -228,12 +232,12 @@ export function getSentimentAnalysis(hotelId: string) {
   };
 }
 
-export function getUpsellSuggestions(hotelId: string, bookingId?: string) {
-  const services = db.queryAll('SELECT id, name, price, category FROM services WHERE hotel_id = ?', [hotelId]);
+export async function getUpsellSuggestions(hotelId: string, bookingId?: string) {
+  const services = await db.queryAll('SELECT id, name, price, category FROM services WHERE hotel_id = ?', [hotelId]);
   if (!services.length) return { suggestions: [] };
 
   if (bookingId) {
-    const booking = db.queryOne(`
+    const booking = await db.queryOne(`
       SELECT b.*, g.first_name || ' ' || g.last_name as guest_name, r.room_number, rt.name as room_type
       FROM bookings b
       JOIN guests g ON b.guest_id = g.id
@@ -244,7 +248,7 @@ export function getUpsellSuggestions(hotelId: string, bookingId?: string) {
 
     if (!booking) return { suggestions: [] };
 
-    const existingServices = db.queryAll(
+    const existingServices = await db.queryAll(
       'SELECT service_id FROM booking_services WHERE booking_id = ?',
       [bookingId]
     );

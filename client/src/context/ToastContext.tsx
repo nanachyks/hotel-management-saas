@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { colors } from '../styles';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -31,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             padding: '14px 24px', borderRadius: 10, color: '#fff', fontSize: 15, fontWeight: 500,
             boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minWidth: 280, maxWidth: 420,
             animation: 'slideIn 0.25s ease-out',
-            background: t.type === 'success' ? '#22c55e' : t.type === 'error' ? '#ef4444' : '#3b82f6',
+            background: t.type === 'success' ? '#22c55e' : t.type === 'error' ? '#ef4444' : colors.primary,
           }}>
             {t.message}
           </div>

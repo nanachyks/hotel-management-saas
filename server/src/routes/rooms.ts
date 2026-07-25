@@ -29,7 +29,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-roomsRouter.get('/', (req: AuthRequest, res: Response) => {
+roomsRouter.get('/', async (req: AuthRequest, res: Response) => {
   const { status, floor, search, page: pageStr, limit: limitStr } = req.query;
   const hasPagination = pageStr !== undefined;
   const page = Math.max(1, parseInt(pageStr as string) || 1);
@@ -59,16 +59,16 @@ roomsRouter.get('/', (req: AuthRequest, res: Response) => {
   }
   if (search) {
     const s = `%${search}%`;
-    query += ' AND (r.room_number LIKE ? OR r.amenities LIKE ? OR r.notes LIKE ? OR rt.name LIKE ?)';
-    countQuery += ' AND (r.room_number LIKE ? OR r.amenities LIKE ? OR r.notes LIKE ? OR rt.name LIKE ?)';
+    query += ' AND (r.room_number ILIKE ? OR r.amenities ILIKE ? OR r.notes ILIKE ? OR rt.name ILIKE ?)';
+    countQuery += ' AND (r.room_number ILIKE ? OR r.amenities ILIKE ? OR r.notes ILIKE ? OR rt.name ILIKE ?)';
     params.push(s, s, s, s);
     countParams.push(s, s, s, s);
   }
   query += ' ORDER BY r.floor, r.room_number LIMIT ? OFFSET ?';
   params.push(String(limit), String(offset));
 
-  const rooms = db.queryAll(query, params);
-  const { total } = db.queryOne(countQuery, countParams) || { total: 0 };
+  const rooms = await db.queryAll(query, params);
+  const { total } = (await db.queryOne(countQuery, countParams)) || { total: 0 };
 
   if (hasPagination) {
     res.json({ data: rooms, total, page, limit });
@@ -77,17 +77,17 @@ roomsRouter.get('/', (req: AuthRequest, res: Response) => {
   }
 });
 
-roomsRouter.get('/availability', (req: AuthRequest, res: Response) => {
+roomsRouter.get('/availability', async (req: AuthRequest, res: Response) => {
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to query params required (YYYY-MM-DD)' });
 
-  const rooms = db.queryAll(`
+  const rooms = await db.queryAll(`
     SELECT r.*, rt.name as room_type_name, rt.base_price, rt.capacity as room_type_capacity
     FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id
     WHERE r.hotel_id = ? ORDER BY r.room_number
   `, [req.user!.hotel_id]);
 
-  const bookings = db.queryAll(`
+  const bookings = await db.queryAll(`
     SELECT b.id, b.room_id, b.check_in_date, b.check_out_date, b.status,
            g.first_name || ' ' || g.last_name as guest_name
     FROM bookings b
@@ -125,26 +125,26 @@ roomsRouter.get('/availability', (req: AuthRequest, res: Response) => {
   res.json({ dates, rooms: result });
 });
 
-roomsRouter.get('/check-availability', (req: AuthRequest, res: Response) => {
+roomsRouter.get('/check-availability', async (req: AuthRequest, res: Response) => {
   const { room_id, check_in, check_out } = req.query;
   if (!room_id || !check_in || !check_out) {
     return res.status(400).json({ error: 'room_id, check_in, check_out required' });
   }
 
-  const overlapping = db.queryOne(`
+  const overlapping = await db.queryOne(`
     SELECT COUNT(*) as count FROM bookings
     WHERE room_id = ? AND status IN ('confirmed', 'checked_in')
     AND check_in_date < ? AND check_out_date > ?
   `, [room_id as string, check_out as string, check_in as string]);
 
-  const room = db.queryOne('SELECT status FROM rooms WHERE id = ? AND hotel_id = ?', [room_id as string, req.user!.hotel_id]);
+  const room = await db.queryOne('SELECT status FROM rooms WHERE id = ? AND hotel_id = ?', [room_id as string, req.user!.hotel_id]);
 
   const available = (overlapping?.count || 0) === 0 && room?.status !== 'maintenance' && room?.status !== 'out_of_service';
   res.json({ available, overlappingBookings: overlapping?.count || 0 });
 });
 
-roomsRouter.get('/floors', (req: AuthRequest, res: Response) => {
-  const rooms = db.queryAll(`
+roomsRouter.get('/floors', async (req: AuthRequest, res: Response) => {
+  const rooms = await db.queryAll(`
     SELECT r.*, rt.name as room_type_name, rt.base_price, rt.capacity as room_type_capacity
     FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id
     WHERE r.hotel_id = ?
@@ -160,8 +160,8 @@ roomsRouter.get('/floors', (req: AuthRequest, res: Response) => {
   res.json(floors);
 });
 
-roomsRouter.get('/:id', (req: AuthRequest, res: Response) => {
-  const room = db.queryOne(`
+roomsRouter.get('/:id', async (req: AuthRequest, res: Response) => {
+  const room = await db.queryOne(`
     SELECT r.*, rt.name as room_type_name, rt.base_price, rt.capacity as room_type_capacity
     FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id
     WHERE r.id = ? AND r.hotel_id = ?
@@ -170,34 +170,34 @@ roomsRouter.get('/:id', (req: AuthRequest, res: Response) => {
   res.json(room);
 });
 
-roomsRouter.post('/', (req: AuthRequest, res: Response) => {
+roomsRouter.post('/', async (req: AuthRequest, res: Response) => {
   const { room_number, room_type_id, floor, status, amenities, notes, price, capacity } = req.body;
   if (!room_number || !room_type_id) {
     return res.status(400).json({ error: 'room_number and room_type_id are required' });
   }
-  const typeExists = db.queryOne('SELECT id FROM room_types WHERE id = ? AND hotel_id = ?', [room_type_id, req.user!.hotel_id]);
+  const typeExists = await db.queryOne('SELECT id FROM room_types WHERE id = ? AND hotel_id = ?', [room_type_id, req.user!.hotel_id]);
   if (!typeExists) return res.status(400).json({ error: 'Room type not found' });
 
   const id = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO rooms (id, hotel_id, room_number, room_type_id, floor, status, amenities, notes, price, capacity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [id, req.user!.hotel_id, room_number, room_type_id, floor || 1, status || 'available', amenities || '', notes || '', price ?? null, capacity ?? null]
   );
 
-  const created = db.queryOne(`
+  const created = await db.queryOne(`
     SELECT r.*, rt.name as room_type_name, rt.base_price, rt.capacity as room_type_capacity
     FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id WHERE r.id = ?
   `, [id]);
   res.status(201).json(created);
 });
 
-roomsRouter.put('/:id', (req: AuthRequest, res: Response) => {
-  const existing = db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+roomsRouter.put('/:id', async (req: AuthRequest, res: Response) => {
+  const existing = await db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Room not found' });
 
   const { room_number, room_type_id, floor, status, amenities, notes, price, capacity } = req.body;
-  db.execute(
-    "UPDATE rooms SET room_number = ?, room_type_id = ?, floor = ?, status = ?, amenities = ?, notes = ?, price = ?, capacity = ?, updated_at = datetime('now') WHERE id = ? AND hotel_id = ?",
+  await db.execute(
+    "UPDATE rooms SET room_number = ?, room_type_id = ?, floor = ?, status = ?, amenities = ?, notes = ?, price = ?, capacity = ?, updated_at = NOW() WHERE id = ? AND hotel_id = ?",
     [
       room_number ?? existing.room_number, room_type_id ?? existing.room_type_id,
       floor ?? existing.floor, status ?? existing.status,
@@ -207,15 +207,15 @@ roomsRouter.put('/:id', (req: AuthRequest, res: Response) => {
       req.params.id, req.user!.hotel_id
     ]
   );
-  const updated = db.queryOne(`
+  const updated = await db.queryOne(`
     SELECT r.*, rt.name as room_type_name, rt.base_price, rt.capacity as room_type_capacity
     FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id WHERE r.id = ?
   `, [req.params.id]);
   res.json(updated);
 });
 
-roomsRouter.post('/:id/photo', upload.single('photo'), (req: AuthRequest, res: Response) => {
-  const existing = db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+roomsRouter.post('/:id/photo', upload.single('photo'), async (req: AuthRequest, res: Response) => {
+  const existing = await db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Room not found' });
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -224,28 +224,28 @@ roomsRouter.post('/:id/photo', upload.single('photo'), (req: AuthRequest, res: R
     if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
   }
 
-  db.execute("UPDATE rooms SET photo = ?, updated_at = datetime('now') WHERE id = ?", [req.file.filename, req.params.id]);
+  await db.execute("UPDATE rooms SET photo = ?, updated_at = NOW() WHERE id = ?", [req.file.filename, req.params.id]);
   res.json({ photo: req.file.filename });
 });
 
-roomsRouter.delete('/:id/photo', (req: AuthRequest, res: Response) => {
-  const existing = db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+roomsRouter.delete('/:id/photo', async (req: AuthRequest, res: Response) => {
+  const existing = await db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Room not found' });
   if (!existing.photo) return res.status(404).json({ error: 'No photo to delete' });
 
   const filePath = path.join(uploadsDir, existing.photo);
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  db.execute("UPDATE rooms SET photo = NULL, updated_at = datetime('now') WHERE id = ?", [req.params.id]);
+  await db.execute("UPDATE rooms SET photo = NULL, updated_at = NOW() WHERE id = ?", [req.params.id]);
   res.json({ message: 'Photo deleted' });
 });
 
-roomsRouter.delete('/:id', (req: AuthRequest, res: Response) => {
-  const existing = db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+roomsRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
+  const existing = await db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Room not found' });
   if (existing.photo) {
     const filePath = path.join(uploadsDir, existing.photo);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
-  db.execute('DELETE FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+  await db.execute('DELETE FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   res.json({ message: 'Room deleted' });
 });

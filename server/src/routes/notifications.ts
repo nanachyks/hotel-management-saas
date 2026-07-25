@@ -8,40 +8,40 @@ const db = getDb();
 
 notificationsRouter.use(authenticate);
 
-notificationsRouter.get('/', (req: AuthRequest, res: Response) => {
+notificationsRouter.get('/', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const offset = Number(req.query.offset) || 0;
-  const notifications = db.queryAll(
+  const notifications = await db.queryAll(
     'SELECT * FROM notifications WHERE hotel_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
     [String(hotelId), limit, offset]
   );
-  const unread = db.queryOne(
-    'SELECT COUNT(*) as count FROM notifications WHERE hotel_id = ? AND read = 0',
+  const unread = await db.queryOne(
+    'SELECT COUNT(*) as count FROM notifications WHERE hotel_id = ? AND read = false',
     [String(hotelId)]
   );
   res.json({ data: notifications, unread: unread?.count || 0 });
 });
 
-notificationsRouter.put('/:id/read', (req: AuthRequest, res: Response) => {
+notificationsRouter.put('/:id/read', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  db.execute(
-    'UPDATE notifications SET read = 1 WHERE id = ? AND hotel_id = ?',
+  await db.execute(
+    'UPDATE notifications SET read = true WHERE id = ? AND hotel_id = ?',
     [req.params.id, String(hotelId)]
   );
   res.json({ success: true });
 });
 
-notificationsRouter.post('/read-all', (req: AuthRequest, res: Response) => {
+notificationsRouter.post('/read-all', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  db.execute(
-    'UPDATE notifications SET read = 1 WHERE hotel_id = ? AND read = 0',
+  await db.execute(
+    'UPDATE notifications SET read = true WHERE hotel_id = ? AND read = false',
     [String(hotelId)]
   );
   res.json({ success: true });
 });
 
-export function createNotification(
+export async function createNotification(
   hotelId: string,
   type: string,
   title: string,
@@ -50,7 +50,7 @@ export function createNotification(
   userId?: string
 ) {
   const id = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO notifications (id, hotel_id, user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [id, hotelId, userId || null, type, title, message, link]
   );

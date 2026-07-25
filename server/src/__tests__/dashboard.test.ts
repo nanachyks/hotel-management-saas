@@ -7,7 +7,7 @@ const app = createApp();
 let token: string;
 
 beforeEach(async () => {
-  seedTestData();
+  await seedTestData();
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });

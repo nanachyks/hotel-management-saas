@@ -11,7 +11,7 @@ let ownerToken: string;
 let adminId: string;
 
 beforeEach(async () => {
-  const ids = seedTestData();
+  const ids = await seedTestData();
   adminId = ids.adminId;
   const loginAdmin = await request(app)
     .post('/api/auth/login')
@@ -63,7 +63,7 @@ describe('POST /api/users', () => {
     const res = await request(app)
       .post('/api/users')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'newuser', password: 'pass123', name: 'New User', email: 'new@test.com', role: 'receptionist' });
+      .send({ username: 'newuser', password: 'pass1234', name: 'New User', email: 'new@test.com', role: 'receptionist' });
     expect(res.status).toBe(201);
     expect(res.body.username).toBe('newuser');
   });
@@ -80,7 +80,7 @@ describe('POST /api/users', () => {
     const res = await request(app)
       .post('/api/users')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'admin', password: 'pass', name: 'Dup', email: 'dup@test.com' });
+      .send({ username: 'admin', password: 'password1', name: 'Dup', email: 'dup@test.com' });
     expect(res.status).toBe(409);
   });
 });
@@ -88,7 +88,7 @@ describe('POST /api/users', () => {
 describe('PUT /api/users/:id', () => {
   it('should update a user', async () => {
     const db = getDb();
-    const user = db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
+    const user = await db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
     const res = await request(app)
       .put(`/api/users/${user.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -99,7 +99,7 @@ describe('PUT /api/users/:id', () => {
 
   it('should update a user with password change', async () => {
     const db = getDb();
-    const user = db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
+    const user = await db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
     const res = await request(app)
       .put(`/api/users/${user.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -109,7 +109,7 @@ describe('PUT /api/users/:id', () => {
 
   it('should return 409 for duplicate username', async () => {
     const db = getDb();
-    const user = db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
+    const user = await db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
     const res = await request(app)
       .put(`/api/users/${user.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -121,7 +121,7 @@ describe('PUT /api/users/:id', () => {
 describe('DELETE /api/users/:id', () => {
   it('should delete a user', async () => {
     const db = getDb();
-    const user = db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
+    const user = await db.queryOne("SELECT id FROM users WHERE username = 'receptionist'");
     const res = await request(app)
       .delete(`/api/users/${user.id}`)
       .set('Authorization', `Bearer ${adminToken}`);

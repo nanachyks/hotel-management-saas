@@ -131,7 +131,7 @@ export default function BookingDetail() {
 
           <div style={{ marginTop: 24, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {booking.status === 'pending' && (
-              <button onClick={() => updateStatus('confirmed')} style={actionBtn('#3b82f6')}>Confirm Booking</button>
+              <button onClick={() => updateStatus('confirmed')} style={actionBtn(colors.primary)}>Confirm Booking</button>
             )}
             {booking.status === 'confirmed' && (
               <button onClick={() => updateStatus('checked_in')} style={actionBtn('#22c55e')}>Check In</button>
@@ -146,7 +146,7 @@ export default function BookingDetail() {
               <button onClick={() => { if (confirm('Mark as no show?')) updateStatus('no_show'); }} style={actionBtn('#f97316')}>No Show</button>
             )}
             {(booking.status === 'confirmed' || booking.status === 'checked_in') && (
-              <button onClick={openServices} style={actionBtn('#3b82f6')}>Manage Services</button>
+              <button onClick={openServices} style={actionBtn(colors.primary)}>Manage Services</button>
             )}
           </div>
         </div>

@@ -6,7 +6,7 @@ import { AuthRequest } from '../middleware/auth.js';
 export const attendanceRouter = Router();
 const db = getDb();
 
-attendanceRouter.get('/', (req: AuthRequest, res: Response) => {
+attendanceRouter.get('/', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
   const { employee_id, from, to, date, status } = req.query;
   let query = `SELECT a.*, e.first_name || ' ' || e.last_name as employee_name
@@ -18,37 +18,39 @@ attendanceRouter.get('/', (req: AuthRequest, res: Response) => {
   if (date) { query += ' AND a.date = ?'; params.push(date as string); }
   if (status) { query += ' AND a.status = ?'; params.push(status as string); }
   query += ' ORDER BY a.date DESC, a.created_at';
-  const attendance = db.queryAll(query, params);
+  const attendance = await db.queryAll(query, params);
   res.json(attendance);
 });
 
-attendanceRouter.post('/', (req: AuthRequest, res: Response) => {
+attendanceRouter.post('/', async (req: AuthRequest, res: Response) => {
   const { employee_id, date, check_in, check_out, status, notes } = req.body;
   if (!employee_id || !date) return res.status(400).json({ error: 'employee_id and date are required' });
   const hotelId = req.user?.hotel_id;
+  const employee = await db.queryOne('SELECT id FROM employees WHERE id = ? AND hotel_id = ?', [employee_id, String(hotelId)]);
+  if (!employee) return res.status(400).json({ error: 'Employee not found' });
   const id = uuid();
-  db.execute('INSERT INTO attendance (id, hotel_id, employee_id, date, check_in, check_out, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  await db.execute('INSERT INTO attendance (id, hotel_id, employee_id, date, check_in, check_out, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [id, String(hotelId), employee_id, date, check_in || null, check_out || null, status || 'present', notes || '']);
-  const created = db.queryOne(`SELECT a.*, e.first_name || ' ' || e.last_name as employee_name FROM attendance a JOIN employees e ON a.employee_id = e.id WHERE a.id = ?`, [id]);
+  const created = await db.queryOne(`SELECT a.*, e.first_name || ' ' || e.last_name as employee_name FROM attendance a JOIN employees e ON a.employee_id = e.id WHERE a.id = ?`, [id]);
   res.status(201).json(created);
 });
 
-attendanceRouter.put('/:id', (req: AuthRequest, res: Response) => {
+attendanceRouter.put('/:id', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const existing = db.queryOne('SELECT * FROM attendance WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const existing = await db.queryOne('SELECT * FROM attendance WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   if (!existing) return res.status(404).json({ error: 'Attendance record not found' });
   const { check_in, check_out, status, notes } = req.body;
-  db.execute('UPDATE attendance SET check_in = ?, check_out = ?, status = ?, notes = ? WHERE id = ? AND hotel_id = ?',
+  await db.execute('UPDATE attendance SET check_in = ?, check_out = ?, status = ?, notes = ? WHERE id = ? AND hotel_id = ?',
     [check_in ?? existing.check_in, check_out ?? existing.check_out, status ?? existing.status, notes ?? existing.notes,
      req.params.id, String(hotelId)]);
-  const updated = db.queryOne(`SELECT a.*, e.first_name || ' ' || e.last_name as employee_name FROM attendance a JOIN employees e ON a.employee_id = e.id WHERE a.id = ?`, [req.params.id]);
+  const updated = await db.queryOne(`SELECT a.*, e.first_name || ' ' || e.last_name as employee_name FROM attendance a JOIN employees e ON a.employee_id = e.id WHERE a.id = ?`, [req.params.id]);
   res.json(updated);
 });
 
-attendanceRouter.delete('/:id', (req: AuthRequest, res: Response) => {
+attendanceRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const existing = db.queryOne('SELECT * FROM attendance WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const existing = await db.queryOne('SELECT * FROM attendance WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   if (!existing) return res.status(404).json({ error: 'Attendance record not found' });
-  db.execute('DELETE FROM attendance WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  await db.execute('DELETE FROM attendance WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   res.json({ message: 'Attendance deleted' });
 });

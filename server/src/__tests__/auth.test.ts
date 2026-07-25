@@ -5,8 +5,8 @@ import { seedTestData } from './setup.js';
 
 const app = createApp();
 
-beforeEach(() => {
-  seedTestData();
+beforeEach(async () => {
+  await seedTestData();
 });
 
 describe('POST /api/auth/login', () => {
@@ -48,7 +48,7 @@ describe('POST /api/auth/register', () => {
   it('should register a new user and send verification email', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ username: 'newuser', password: 'pass123', name: 'New User', email: 'new@test.com' });
+      .send({ username: 'newuser', password: 'pass1234', name: 'New User', email: 'new@test.com' });
     expect(res.status).toBe(201);
     expect(res.body.message).toContain('check your email');
   });
@@ -63,10 +63,10 @@ describe('POST /api/auth/register', () => {
   it('should return 409 for duplicate username', async () => {
     await request(app)
       .post('/api/auth/register')
-      .send({ username: 'another', password: 'pass123', name: 'Another', email: 'a@test.com' });
+      .send({ username: 'another', password: 'pass1234', name: 'Another', email: 'a@test.com' });
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ username: 'another', password: 'pass456', name: 'Dup', email: 'b@test.com' });
+      .send({ username: 'another', password: 'pass4567', name: 'Dup', email: 'b@test.com' });
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Username already taken');
   });
@@ -74,10 +74,10 @@ describe('POST /api/auth/register', () => {
   it('should return 409 for duplicate email', async () => {
     await request(app)
       .post('/api/auth/register')
-      .send({ username: 'user1', password: 'pass123', name: 'User1', email: 'dup@test.com' });
+      .send({ username: 'user1', password: 'pass1234', name: 'User1', email: 'dup@test.com' });
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ username: 'user2', password: 'pass456', name: 'User2', email: 'dup@test.com' });
+      .send({ username: 'user2', password: 'pass4567', name: 'User2', email: 'dup@test.com' });
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Email already registered');
   });

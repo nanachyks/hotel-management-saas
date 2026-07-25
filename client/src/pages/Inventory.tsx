@@ -239,7 +239,11 @@ export default function Inventory() {
 
       {confirmDelete && (
         <ConfirmModal
+          open
+          title="Delete Item"
           message="Delete this inventory item? This will also remove all transaction history."
+          confirmLabel="Delete"
+          danger
           onConfirm={remove}
           onCancel={() => setConfirmDelete(null)}
         />

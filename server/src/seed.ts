@@ -6,14 +6,14 @@ async function seed() {
   await initDb();
   const db = getDb();
 
-  const existing = db.queryAll('SELECT COUNT(*) as count FROM hotels');
+  const existing = await db.queryAll('SELECT COUNT(*) as count FROM hotels');
   if (existing[0]?.count > 0) {
     console.log('Database already has data, skipping seed.');
     process.exit(0);
   }
 
   const hotelId = uuid();
-  db.execute(
+  await db.execute(
     `INSERT INTO hotels (id, name, slug, email, phone, address, currency, tax_rate, timezone, check_in_time, check_out_time)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [hotelId, 'Grand Hotel Ease', 'grand-hotel-ease', 'info@grandhotel.com', '+1-555-0000', '100 Main St, New York, NY',
@@ -29,7 +29,7 @@ async function seed() {
     { code: 'GBP', name: 'British Pound', symbol: '£' },
   ];
   for (const c of currencies) {
-    db.execute('INSERT OR IGNORE INTO currencies (code, name, symbol) VALUES (?, ?, ?)', [c.code, c.name, c.symbol]);
+    await db.execute('INSERT INTO currencies (code, name, symbol) VALUES (?, ?, ?) ON CONFLICT (code) DO NOTHING', [c.code, c.name, c.symbol]);
   }
   const baseRates = [
     { from: 'USD', to: 'GHS', rate: 15.50 }, { from: 'USD', to: 'NGN', rate: 1550 },
@@ -41,19 +41,19 @@ async function seed() {
     { from: 'GBP', to: 'GBP', rate: 1 },
   ];
   for (const r of baseRates) {
-    db.execute('INSERT OR IGNORE INTO exchange_rates (from_currency, to_currency, rate) VALUES (?, ?, ?)', [r.from, r.to, r.rate]);
+    await db.execute('INSERT INTO exchange_rates (from_currency, to_currency, rate) VALUES (?, ?, ?) ON CONFLICT (from_currency, to_currency) DO NOTHING', [r.from, r.to, r.rate]);
   }
 
   // Ghana taxes
   const ghanaTaxes = [
-    { id: uuid(), name: 'VAT', rate: 15.0, type: 'percentage', is_mandatory: 1 },
-    { id: uuid(), name: 'NHIL', rate: 2.5, type: 'percentage', is_mandatory: 1 },
-    { id: uuid(), name: 'GetFund', rate: 2.5, type: 'percentage', is_mandatory: 1 },
-    { id: uuid(), name: 'COVID-19 Levy', rate: 1.0, type: 'percentage', is_mandatory: 1 },
-    { id: uuid(), name: 'Tourism Levy', rate: 0.0, type: 'percentage', is_mandatory: 0 },
+    { id: uuid(), name: 'VAT', rate: 15.0, type: 'percentage', is_mandatory: true },
+    { id: uuid(), name: 'NHIL', rate: 2.5, type: 'percentage', is_mandatory: true },
+    { id: uuid(), name: 'GetFund', rate: 2.5, type: 'percentage', is_mandatory: true },
+    { id: uuid(), name: 'COVID-19 Levy', rate: 1.0, type: 'percentage', is_mandatory: true },
+    { id: uuid(), name: 'Tourism Levy', rate: 0.0, type: 'percentage', is_mandatory: false },
   ];
   for (const t of ghanaTaxes) {
-    db.execute(
+    await db.execute(
       'INSERT INTO hotel_taxes (id, hotel_id, name, rate, type, is_mandatory) VALUES (?, ?, ?, ?, ?, ?)',
       [t.id, hotelId, t.name, t.rate, t.type, t.is_mandatory]
     );
@@ -61,14 +61,14 @@ async function seed() {
 
   // Subscription plans
   const plans = [
-    { id: uuid(), name: 'Free Trial', slug: 'free_trial', description: 'Get started with basic hotel management features. Perfect for testing the platform.', price_monthly: 0, price_yearly: 0, max_rooms: 5, max_users: 2, features: JSON.stringify(['Up to 5 rooms', 'Up to 2 users', 'Basic dashboard', 'Manual bookings', 'Email support']), highlighted: 0, sort_order: 1 },
-    { id: uuid(), name: 'Basic', slug: 'basic', description: 'Essential tools for small hotels and B&Bs to manage daily operations.', price_monthly: 29, price_yearly: 290, max_rooms: 20, max_users: 5, features: JSON.stringify(['Up to 20 rooms', 'Up to 5 users', 'Dashboard & reports', 'Online bookings', 'Guest management', 'Invoice generation', 'Email support']), highlighted: 0, sort_order: 2 },
-    { id: uuid(), name: 'Professional', slug: 'professional', description: 'Complete solution for growing hotels with advanced features and integrations.', price_monthly: 79, price_yearly: 790, max_rooms: 100, max_users: 20, features: JSON.stringify(['Up to 100 rooms', 'Up to 20 users', 'Advanced analytics', 'Housekeeping module', 'Maintenance tracking', 'Room service management', 'Staff scheduling', 'Export reports (CSV/PDF)', 'Priority email support']), highlighted: 1, sort_order: 3 },
-    { id: uuid(), name: 'Enterprise', slug: 'enterprise', description: 'Unlimited everything with dedicated support and custom integrations for large properties.', price_monthly: 199, price_yearly: 1990, max_rooms: 9999, max_users: 9999, features: JSON.stringify(['Unlimited rooms', 'Unlimited users', 'All Professional features', 'API access', 'Multi-property management', 'Custom integrations', 'Dedicated account manager', 'Phone & priority support', 'SLA guarantee']), highlighted: 0, sort_order: 4 },
+    { id: uuid(), name: 'Free Trial', slug: 'free_trial', description: 'Get started with basic hotel management features. Perfect for testing the platform.', price_monthly: 0, price_yearly: 0, max_rooms: 5, max_users: 2, features: JSON.stringify(['Up to 5 rooms', 'Up to 2 users', 'Basic dashboard', 'Manual bookings', 'Email support']), highlighted: false, sort_order: 1 },
+    { id: uuid(), name: 'Basic', slug: 'basic', description: 'Essential tools for small hotels and B&Bs to manage daily operations.', price_monthly: 29, price_yearly: 290, max_rooms: 20, max_users: 5, features: JSON.stringify(['Up to 20 rooms', 'Up to 5 users', 'Dashboard & reports', 'Online bookings', 'Guest management', 'Invoice generation', 'Email support']), highlighted: false, sort_order: 2 },
+    { id: uuid(), name: 'Professional', slug: 'professional', description: 'Complete solution for growing hotels with advanced features and integrations.', price_monthly: 79, price_yearly: 790, max_rooms: 100, max_users: 20, features: JSON.stringify(['Up to 100 rooms', 'Up to 20 users', 'Advanced analytics', 'Housekeeping module', 'Maintenance tracking', 'Room service management', 'Staff scheduling', 'Export reports (CSV/PDF)', 'Priority email support']), highlighted: true, sort_order: 3 },
+    { id: uuid(), name: 'Enterprise', slug: 'enterprise', description: 'Unlimited everything with dedicated support and custom integrations for large properties.', price_monthly: 199, price_yearly: 1990, max_rooms: 9999, max_users: 9999, features: JSON.stringify(['Unlimited rooms', 'Unlimited users', 'All Professional features', 'API access', 'Multi-property management', 'Custom integrations', 'Dedicated account manager', 'Phone & priority support', 'SLA guarantee']), highlighted: false, sort_order: 4 },
   ];
 
   for (const p of plans) {
-    db.execute(
+    await db.execute(
       'INSERT INTO subscription_plans (id, name, slug, description, price_monthly, price_yearly, max_rooms, max_users, features, highlighted, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [p.id, p.name, p.slug, p.description, p.price_monthly, p.price_yearly, p.max_rooms, p.max_users, p.features, p.highlighted, p.sort_order]
     );
@@ -78,25 +78,25 @@ async function seed() {
   const freePlan = plans[0];
   const subId = uuid();
   const periodEnd = new Date(); periodEnd.setDate(periodEnd.getDate() + 14);
-  db.execute(
+  await db.execute(
     `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, trial_ends_at, current_period_ends_at)
-     VALUES (?, ?, ?, 'monthly', 'trial', datetime('now', '+14 days'), ?)`,
+     VALUES (?, ?, ?, 'monthly', 'trial', NOW() + INTERVAL '14 days', ?)`,
     [subId, hotelId, freePlan.id, periodEnd.toISOString().split('T')[0]]
   );
 
   const adminId = uuid();
   const ownerId = uuid();
-  db.execute(
-    'INSERT INTO users (id, hotel_id, username, email, password_hash, name, role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+  await db.execute(
+    'INSERT INTO users (id, hotel_id, username, email, password_hash, name, role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, true)',
     [adminId, hotelId, 'admin', 'admin@hotelease.com', bcrypt.hashSync('admin123', 10), 'Admin User', 'admin']
   );
-  db.execute(
-    'INSERT INTO users (id, hotel_id, username, email, password_hash, name, role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+  await db.execute(
+    'INSERT INTO users (id, hotel_id, username, email, password_hash, name, role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, true)',
     [ownerId, hotelId, 'owner', 'owner@hotelease.com', bcrypt.hashSync('owner123', 10), 'Hotel Owner', 'owner']
   );
 
-  db.execute('INSERT OR IGNORE INTO hotel_members (id, user_id, hotel_id, role) VALUES (?, ?, ?, ?)', [uuid(), adminId, hotelId, 'admin']);
-  db.execute('INSERT OR IGNORE INTO hotel_members (id, user_id, hotel_id, role) VALUES (?, ?, ?, ?)', [uuid(), ownerId, hotelId, 'owner']);
+  await db.execute('INSERT INTO hotel_members (id, user_id, hotel_id, role) VALUES (?, ?, ?, ?) ON CONFLICT (user_id, hotel_id) DO NOTHING', [uuid(), adminId, hotelId, 'admin']);
+  await db.execute('INSERT INTO hotel_members (id, user_id, hotel_id, role) VALUES (?, ?, ?, ?) ON CONFLICT (user_id, hotel_id) DO NOTHING', [uuid(), ownerId, hotelId, 'owner']);
 
   const roomTypes = [
     { id: uuid(), name: 'Single', base_price: 300, capacity: 1, description: 'Cozy single room with city view' },
@@ -108,7 +108,7 @@ async function seed() {
   ];
 
   for (const rt of roomTypes) {
-    db.execute(
+    await db.execute(
       'INSERT INTO room_types (id, hotel_id, name, description, base_price, capacity) VALUES (?, ?, ?, ?, ?, ?)',
       [rt.id, hotelId, rt.name, rt.description, rt.base_price, rt.capacity]
     );
@@ -134,7 +134,7 @@ async function seed() {
 
   for (const r of rooms) {
     r.id = uuid();
-    db.execute(
+    await db.execute(
       'INSERT INTO rooms (id, hotel_id, room_number, room_type_id, floor, status, amenities, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [r.id, hotelId, r.room_number, r.room_type_id, r.floor, 'available', r.amenities, r.notes]
     );
@@ -145,23 +145,23 @@ async function seed() {
   const guest3Id = uuid();
   const guest4Id = uuid();
   const guest5Id = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO guests (id, hotel_id, first_name, last_name, email, phone, id_card_number, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [guest1Id, hotelId, 'John', 'Doe', 'john@example.com', '+1-555-0101', 'ID-12345', '123 Main St, NY']
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO guests (id, hotel_id, first_name, last_name, email, phone, id_card_number, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [guest2Id, hotelId, 'Jane', 'Smith', 'jane@example.com', '+1-555-0102', 'ID-67890', '456 Oak Ave, LA']
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO guests (id, hotel_id, first_name, last_name, email, phone, id_card_number, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [guest3Id, hotelId, 'Robert', 'Johnson', 'robert@example.com', '+1-555-0103', 'ID-11111', '789 Pine Rd, Chicago']
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO guests (id, hotel_id, first_name, last_name, email, phone, id_card_number, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [guest4Id, hotelId, 'Emily', 'Davis', 'emily@example.com', '+1-555-0104', 'ID-22222', '321 Elm St, Boston']
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO guests (id, hotel_id, first_name, last_name, email, phone, id_card_number, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [guest5Id, hotelId, 'Michael', 'Brown', 'michael@example.com', '+1-555-0105', 'ID-33333', '654 Maple Dr, Miami']
   );
@@ -176,7 +176,7 @@ async function seed() {
   ];
 
   for (const s of services) {
-    db.execute(
+    await db.execute(
       'INSERT INTO services (id, hotel_id, name, description, price, category) VALUES (?, ?, ?, ?, ?, ?)',
       [s.id, hotelId, s.name, '', s.price, s.category]
     );
@@ -209,18 +209,18 @@ async function seed() {
     const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
     const total = nights * roomTypeData.base_price;
     const bid = uuid();
-    db.execute(
+    await db.execute(
       'INSERT INTO bookings (id, hotel_id, guest_id, room_id, check_in_date, check_out_date, total_amount, source, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [bid, hotelId, b.guest_id, b.room_id, b.check_in, b.check_out, total, b.source, b.status]
     );
     if (b.status === 'checked_out') {
-      db.execute(
+      await db.execute(
         'INSERT INTO invoices (id, hotel_id, booking_id, amount, paid_amount, status, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [uuid(), hotelId, bid, total, total, 'paid', fmt(new Date())]
       );
     } else {
       const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
-      db.execute(
+      await db.execute(
         'INSERT INTO invoices (id, hotel_id, booking_id, amount, due_date) VALUES (?, ?, ?, ?, ?)',
         [uuid(), hotelId, bid, total, fmt(dueDate)]
       );
@@ -228,9 +228,9 @@ async function seed() {
   }
 
   // Update room statuses to match existing bookings
-  db.execute("UPDATE rooms SET status = 'occupied' WHERE id = ?", [sampleBookings[3].room_id]);
-  db.execute("UPDATE rooms SET status = 'maintenance' WHERE id = ?", [rooms[8].id]);
-  db.execute("UPDATE rooms SET status = 'cleaning' WHERE id = ?", [rooms[13].id]);
+  await db.execute("UPDATE rooms SET status = 'occupied' WHERE id = ?", [sampleBookings[3].room_id]);
+  await db.execute("UPDATE rooms SET status = 'maintenance' WHERE id = ?", [rooms[8].id]);
+  await db.execute("UPDATE rooms SET status = 'cleaning' WHERE id = ?", [rooms[13].id]);
 
   // Sample expenses
   const sampleExpenses = [
@@ -247,16 +247,16 @@ async function seed() {
     { category: 'maintenance', description: 'Elevator maintenance', amount: 1500, date: past(10) },
   ];
   for (const ex of sampleExpenses) {
-    db.execute(
+    await db.execute(
       'INSERT INTO expenses (id, hotel_id, category, description, amount, date) VALUES (?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, ex.category, ex.description, ex.amount, ex.date]
     );
   }
 
   // Record payments for the checked_out booking
-  const paidInvoice = db.queryOne("SELECT i.id FROM invoices i JOIN bookings b ON i.booking_id = b.id WHERE b.status = 'checked_out' LIMIT 1");
+  const paidInvoice = await db.queryOne("SELECT i.id FROM invoices i JOIN bookings b ON i.booking_id = b.id WHERE b.status = 'checked_out' LIMIT 1");
   if (paidInvoice) {
-    db.execute(
+    await db.execute(
       'INSERT INTO payments (id, invoice_id, amount, method, reference) VALUES (?, ?, ?, ?, ?)',
       [uuid(), paidInvoice.id, 900, 'card', 'TXN-REF-001']
     );
@@ -270,7 +270,7 @@ async function seed() {
     { id: uuid(), name: 'Front Desk', description: 'Reception and guest services' },
   ];
   for (const d of departments) {
-    db.execute('INSERT INTO departments (id, hotel_id, name, description) VALUES (?, ?, ?, ?)',
+    await db.execute('INSERT INTO departments (id, hotel_id, name, description) VALUES (?, ?, ?, ?)',
       [d.id, hotelId, d.name, d.description]);
   }
 
@@ -283,7 +283,7 @@ async function seed() {
     { id: uuid(), dept: departments[3].id, first: 'James', last: 'Wilson', email: 'james@hotelease.com', phone: '+1-555-1005', position: 'Concierge', rate: 20 },
   ];
   for (const e of employees) {
-    db.execute(
+    await db.execute(
       'INSERT INTO employees (id, hotel_id, department_id, first_name, last_name, email, phone, position, hourly_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [e.id, hotelId, e.dept, e.first, e.last, e.email, e.phone, e.position, e.rate]
     );
@@ -297,7 +297,7 @@ async function seed() {
     { emp: employees[2].id, date: fmtDate(today), start: '14:00', end: '22:00', notes: 'Afternoon shift' },
   ];
   for (const s of shifts) {
-    db.execute('INSERT INTO shifts (id, hotel_id, employee_id, date, start_time, end_time, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    await db.execute('INSERT INTO shifts (id, hotel_id, employee_id, date, start_time, end_time, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, s.emp, s.date, s.start, s.end, s.notes]);
   }
 
@@ -308,7 +308,7 @@ async function seed() {
     { emp: employees[3].id, date: past(1), check_in: '14:00', check_out: '22:00', status: 'present' },
   ];
   for (const a of attendanceRecords) {
-    db.execute('INSERT INTO attendance (id, hotel_id, employee_id, date, check_in, check_out, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    await db.execute('INSERT INTO attendance (id, hotel_id, employee_id, date, check_in, check_out, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, a.emp, a.date, a.check_in, a.check_out, a.status]);
   }
 
@@ -319,7 +319,7 @@ async function seed() {
     { room: rooms[7].id, assign: employees[1].id, priority: 'medium', date: future(1), notes: 'Prepare for new guest arrival' },
   ];
   for (const t of hkTasks) {
-    db.execute(
+    await db.execute(
       'INSERT INTO housekeeping_tasks (id, hotel_id, room_id, assigned_to, priority, scheduled_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, t.room, t.assign, t.priority, t.date, t.notes]);
   }
@@ -330,36 +330,36 @@ async function seed() {
     { room: rooms[2].id, reported: employees[0].id, title: 'Leaky faucet', desc: 'Bathroom sink faucet dripping continuously', priority: 'medium', status: 'reported', assigned: null },
   ];
   for (const m of maintRequests) {
-    db.execute(
+    await db.execute(
       'INSERT INTO maintenance_requests (id, hotel_id, room_id, reported_by, title, description, priority, status, assigned_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, m.room, m.reported, m.title, m.desc, m.priority, m.status, m.assigned]);
   }
 
   // Sample deposits
-  const sampleBookingsList = db.queryAll("SELECT id FROM bookings WHERE hotel_id = ?", [hotelId]);
+  const sampleBookingsList = await db.queryAll("SELECT id FROM bookings WHERE hotel_id = ?", [hotelId]);
   if (sampleBookingsList.length > 0) {
-    db.execute(
+    await db.execute(
       'INSERT INTO deposits (id, booking_id, amount, method) VALUES (?, ?, ?, ?)',
       [uuid(), sampleBookingsList[0].id, 200, 'card']
     );
-    db.execute(
+    await db.execute(
       'INSERT INTO deposits (id, booking_id, amount, method) VALUES (?, ?, ?, ?)',
       [uuid(), sampleBookingsList[1].id, 150, 'cash']
     );
-    const invoiceWithDeposit = db.queryOne("SELECT id FROM invoices WHERE booking_id = ?", [sampleBookingsList[0].id]);
+    const invoiceWithDeposit = await db.queryOne("SELECT id FROM invoices WHERE booking_id = ?", [sampleBookingsList[0].id]);
     if (invoiceWithDeposit) {
-      db.execute('UPDATE invoices SET deposit = 200 WHERE id = ?', [invoiceWithDeposit.id]);
+      await db.execute('UPDATE invoices SET deposit = 200 WHERE id = ?', [invoiceWithDeposit.id]);
     }
   }
 
   // Payroll seed
   const payrollDeductions = [
-    { id: uuid(), name: 'Social Security (SSNIT)', type: 'percentage', value: 5.5, mandatory: 1 },
-    { id: uuid(), name: 'Income Tax (PAYE)', type: 'percentage', value: 10, mandatory: 1 },
-    { id: uuid(), name: 'Provident Fund', type: 'percentage', value: 5, mandatory: 0 },
+    { id: uuid(), name: 'Social Security (SSNIT)', type: 'percentage', value: 5.5, mandatory: true },
+    { id: uuid(), name: 'Income Tax (PAYE)', type: 'percentage', value: 10, mandatory: true },
+    { id: uuid(), name: 'Provident Fund', type: 'percentage', value: 5, mandatory: false },
   ];
   for (const d of payrollDeductions) {
-    db.execute('INSERT INTO payroll_deductions (id, hotel_id, name, type, value, is_mandatory) VALUES (?, ?, ?, ?, ?, ?)',
+    await db.execute('INSERT INTO payroll_deductions (id, hotel_id, name, type, value, is_mandatory) VALUES (?, ?, ?, ?, ?, ?)',
       [d.id, hotelId, d.name, d.type, d.value, d.mandatory]);
   }
 
@@ -367,7 +367,7 @@ async function seed() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  db.execute('INSERT INTO payroll_periods (id, hotel_id, start_date, end_date, status) VALUES (?, ?, ?, ?, ?)',
+  await db.execute('INSERT INTO payroll_periods (id, hotel_id, start_date, end_date, status) VALUES (?, ?, ?, ?, ?)',
     [periodId, hotelId, monthStart, monthEnd, 'open']);
 
   for (const emp of employees) {
@@ -379,11 +379,11 @@ async function seed() {
     const dedTotal = deds.reduce((s, d) => s + d.amount, 0);
     const netPay = Math.round((basePay - dedTotal) * 100) / 100;
     const entryId = uuid();
-    db.execute(
+    await db.execute(
       'INSERT INTO payroll_entries (id, hotel_id, period_id, employee_id, base_pay, overtime_pay, bonuses, deductions_total, net_pay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [entryId, hotelId, periodId, emp.id, basePay, 0, 0, dedTotal, netPay]
     );
-    db.execute(
+    await db.execute(
       'INSERT INTO payslips (id, entry_id, hotel_id, employee_id, period_id, gross_pay, deductions_breakdown, net_pay) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [uuid(), entryId, hotelId, emp.id, periodId, basePay, JSON.stringify(deds), netPay]
     );
@@ -395,7 +395,7 @@ async function seed() {
     { room: rooms[7].id, guest: 'Jane Smith', type: 'food', desc: 'Continental breakfast at 7:30 AM', status: 'delivered' },
   ];
   for (const r of rsRequests) {
-    db.execute(
+    await db.execute(
       'INSERT INTO room_service_requests (id, hotel_id, room_id, guest_name, request_type, description, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, r.room, r.guest, r.type, r.desc, r.status]);
   }
@@ -404,8 +404,8 @@ async function seed() {
   // Phase 6: Historical data for reports (12 months)
   // ─────────────────────────────────────────────────────────────
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const allGuests = db.queryAll('SELECT id FROM guests WHERE hotel_id = ?', [hotelId]);
-  const allRooms = db.queryAll('SELECT r.id, rt.base_price FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id WHERE r.hotel_id = ?', [hotelId]);
+  const allGuests = await db.queryAll('SELECT id FROM guests WHERE hotel_id = ?', [hotelId]);
+  const allRooms = await db.queryAll('SELECT r.id, rt.base_price FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id WHERE r.hotel_id = ?', [hotelId]);
   const sources = ['walk_in', 'online', 'phone', 'corporate', 'group'];
   const statuses: string[] = ['confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'];
   const expenseCats = ['utilities', 'supplies', 'maintenance', 'salary', 'marketing', 'food', 'transport', 'other'];
@@ -443,7 +443,7 @@ async function seed() {
         status = 'checked_in';
       }
       const bid = uuid();
-      db.execute(
+      await db.execute(
         'INSERT INTO bookings (id, hotel_id, guest_id, room_id, check_in_date, check_out_date, total_amount, source, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [bid, hotelId, guest.id, room.id, fmt(checkIn), fmt(checkOut), total, source, status, fmt(checkIn)]
       );
@@ -453,19 +453,19 @@ async function seed() {
       if (status === 'checked_out') {
         const invId = uuid();
         const paid = Math.random() > 0.1 ? total : Math.round(total * 0.5);
-        db.execute(
+        await db.execute(
           'INSERT INTO invoices (id, hotel_id, booking_id, amount, paid_amount, status, issued_date, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [invId, hotelId, bid, total, paid, paid >= total ? 'paid' : 'partial', fmt(checkIn), fmt(checkOut)]
         );
         if (paid > 0) {
           const methods = ['cash', 'card', 'mobile_money', 'bank_transfer'];
-          db.execute(
+          await db.execute(
             'INSERT INTO payments (id, invoice_id, amount, method, reference) VALUES (?, ?, ?, ?, ?)',
             [uuid(), invId, paid, methods[Math.floor(Math.random() * methods.length)], `TXN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`]
           );
         }
       } else if (status === 'confirmed' || status === 'checked_in' || status === 'pending') {
-        db.execute(
+        await db.execute(
           'INSERT INTO invoices (id, hotel_id, booking_id, amount, issued_date, due_date) VALUES (?, ?, ?, ?, ?, ?)',
           [uuid(), hotelId, bid, total, fmt(checkIn), fmt(new Date(checkOut.getTime() + 7 * 86400000))]
         );
@@ -491,7 +491,7 @@ async function seed() {
       const cat = expenseCats[Math.floor(Math.random() * expenseCats.length)];
       const desc = descs[cat][Math.floor(Math.random() * descs[cat].length)];
       const amount = amounts[Math.floor(Math.random() * amounts.length)];
-      db.execute(
+      await db.execute(
         'INSERT INTO expenses (id, hotel_id, category, description, amount, date) VALUES (?, ?, ?, ?, ?, ?)',
         [uuid(), hotelId, cat, desc, amount, fmt(expDate)]
       );
@@ -505,12 +505,12 @@ async function seed() {
   // Sample Integrations
   // ─────────────────────────────────────────────────────────────
   const sampleIntegrations = [
-    { type: 'channel_manager', provider: 'bookingdotcom', name: 'Booking.com', enabled: 1 },
-    { type: 'payment_gateway', provider: 'paystack', name: 'Paystack', enabled: 1 },
-    { type: 'accounting', provider: 'quickbooks', name: 'QuickBooks', enabled: 0 },
+    { type: 'channel_manager', provider: 'bookingdotcom', name: 'Booking.com', enabled: true },
+    { type: 'payment_gateway', provider: 'paystack', name: 'Paystack', enabled: true },
+    { type: 'accounting', provider: 'quickbooks', name: 'QuickBooks', enabled: false },
   ];
   for (const si of sampleIntegrations) {
-    db.execute(
+    await db.execute(
       'INSERT INTO integrations (id, hotel_id, type, provider, name, enabled) VALUES (?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, si.type, si.provider, si.name, si.enabled]
     );
@@ -518,40 +518,40 @@ async function seed() {
 
   // ── Enterprise Seed Data ──
   const corpId = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO corporate_accounts (id, hotel_id, company_name, contact_name, contact_email, contact_phone, credit_limit, payment_terms, discount_rate, notes) VALUES (?,?,?,?,?,?,?,?,?,?)',
     [corpId, hotelId, 'Accra Business Corp', 'John Doe', 'john@abusiness.com', '+233501234567', 50000, 'net30', 5, 'Preferred corporate client']
   );
   if (roomTypes.length) {
-    db.execute(
+    await db.execute(
       'INSERT INTO corporate_rates (id, account_id, room_type_id, negotiated_price, valid_from) VALUES (?,?,?,?,?)',
       [uuid(), corpId, roomTypes[0].id, roomTypes[0].base_price * 0.8, fmt(today)]
     );
   }
   const groupId = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO franchise_groups (id, name, parent_hotel_id, settings) VALUES (?,?,?,?)',
     [groupId, 'Grand Hotel Ease Group', hotelId, '{"currency":"GHS","timezone":"Africa/Accra"}']
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO franchise_members (id, group_id, hotel_id, role) VALUES (?,?,?,?)',
     [uuid(), groupId, hotelId, 'owner']
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO custom_roles (id, hotel_id, name, permissions) VALUES (?,?,?,?)',
     [uuid(), hotelId, 'Night Auditor', JSON.stringify(['bookings.view','bookings.edit','guests.view','billing.view','reports.view','inventory.view'])]
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO custom_roles (id, hotel_id, name, permissions) VALUES (?,?,?,?)',
     [uuid(), hotelId, 'Revenue Manager', JSON.stringify(['bookings.view','bookings.edit','rooms.edit','reports.view','reports.export','ai.view','inventory.view'])]
   );
   const apiKeyRaw = 'he_' + Array.from({length:48},()=>'abcdef0123456789'[Math.floor(Math.random()*16)]).join('');
   const apiSecretRaw = Array.from({length:64},()=>'abcdef0123456789'[Math.floor(Math.random()*16)]).join('');
-  db.execute(
+  await db.execute(
     'INSERT INTO api_keys (id, hotel_id, name, key, secret, permissions, ip_whitelist, rate_limit) VALUES (?,?,?,?,?,?,?,?)',
     [uuid(), hotelId, 'Production App', apiKeyRaw, apiSecretRaw, '["read","write"]', '["192.168.1.0/24"]', 500]
   );
-  db.execute(
+  await db.execute(
     'INSERT INTO white_label_settings (id, hotel_id, primary_color, footer_text) VALUES (?,?,?,?)',
     [uuid(), hotelId, '#3b82f6', 'Powered by HotelEase']
   );
@@ -598,7 +598,7 @@ async function seed() {
     { name: 'Key Cards (Blank)', cat: 'other', qty: 100, unit: 'piece', min: 20, cost: 1.50, notes: 'Magnetic stripe door cards' },
   ];
   for (const item of inventoryItems) {
-    db.execute(
+    await db.execute(
       'INSERT INTO inventory_items (id, hotel_id, name, category, quantity, unit, min_stock, cost_price, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [uuid(), hotelId, item.name, item.cat, item.qty, item.unit, item.min, item.cost, item.notes]
     );

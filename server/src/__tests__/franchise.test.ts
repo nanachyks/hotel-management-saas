@@ -9,7 +9,7 @@ let token: string;
 let hotelId: string;
 
 beforeEach(async () => {
-  const ids = seedTestData();
+  const ids = await seedTestData();
   hotelId = ids.hotelId;
   const login = await request(app)
     .post('/api/auth/login')

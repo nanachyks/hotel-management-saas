@@ -52,7 +52,7 @@ export default function PaymentCallback() {
             <p style={{ color: colors.slate, fontSize: 15, marginBottom: 24 }}>{message}</p>
             <button onClick={() => navigate('/subscriptions')} style={{
               padding: '12px 32px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 15,
-              background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff',
+              background: `linear-gradient(135deg, ${colors.primary}, #2563eb)`, color: '#fff',
             }}>Back to Subscriptions</button>
           </>
         )}

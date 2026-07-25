@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { BrandProvider } from './context/BrandContext';
 import { ToastProvider } from './context/ToastContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { CurrencyProvider } from './context/CurrencyContext';
@@ -38,12 +39,20 @@ import PaymentCallback from './pages/PaymentCallback';
 import AIInsights from './pages/AIInsights';
 import Payroll from './pages/Payroll';
 import Integrations from './pages/Integrations';
+import Corporate from './pages/Corporate';
+import Franchise from './pages/Franchise';
+import Roles from './pages/Roles';
+import ApiKeys from './pages/ApiKeys';
+import WhiteLabel from './pages/WhiteLabel';
+import Enterprise from './pages/Enterprise';
+import Channels from './pages/Channels';
 
 export default function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
       <AuthProvider>
+        <BrandProvider>
         <CurrencyProvider>
         <NotificationProvider>
         <ToastProvider>
@@ -83,6 +92,13 @@ export default function App() {
                 <Route path="/users" element={<Users />} />
               </Route>
               <Route path="/hotel" element={<HotelSetup />} />
+              <Route path="/corporate" element={<Corporate />} />
+              <Route path="/franchise" element={<Franchise />} />
+              <Route path="/roles" element={<Roles />} />
+              <Route path="/api-keys" element={<ApiKeys />} />
+              <Route path="/white-label" element={<WhiteLabel />} />
+              <Route path="/enterprise" element={<Enterprise />} />
+              <Route path="/channels" element={<Channels />} />
             </Route>
           </Route>
           <Route path="*" element={<NotFound />} />
@@ -90,6 +106,7 @@ export default function App() {
         </ToastProvider>
         </NotificationProvider>
         </CurrencyProvider>
+        </BrandProvider>
       </AuthProvider>
       </ErrorBoundary>
     </BrowserRouter>

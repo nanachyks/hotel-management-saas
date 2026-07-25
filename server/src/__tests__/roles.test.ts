@@ -8,7 +8,7 @@ const app = createApp();
 let token: string;
 
 beforeEach(async () => {
-  const ids = seedTestData();
+  const ids = await seedTestData();
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
@@ -71,7 +71,7 @@ describe('Custom Roles', () => {
 
   it('POST /api/roles/assign - should assign role to user', async () => {
     const db = getDb();
-    const users = db.queryAll('SELECT id FROM users LIMIT 1');
+    const users = await db.queryAll('SELECT id FROM users LIMIT 1');
     const role = await request(app)
       .post('/api/roles')
       .set('Authorization', `Bearer ${token}`)

@@ -8,7 +8,7 @@ const app = createApp();
 let token: string;
 
 beforeEach(async () => {
-  seedTestData();
+  await seedTestData();
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
@@ -48,7 +48,7 @@ describe('POST /api/services', () => {
 describe('PUT /api/services/:id', () => {
   it('should update a service', async () => {
     const db = getDb();
-    const svc = db.queryOne('SELECT id FROM services');
+    const svc = await db.queryOne('SELECT id FROM services');
     const res = await request(app)
       .put(`/api/services/${svc.id}`)
       .set('Authorization', `Bearer ${token}`)
@@ -69,7 +69,7 @@ describe('PUT /api/services/:id', () => {
 describe('DELETE /api/services/:id', () => {
   it('should delete a service', async () => {
     const db = getDb();
-    const svc = db.queryOne('SELECT id FROM services');
+    const svc = await db.queryOne('SELECT id FROM services');
     const res = await request(app)
       .delete(`/api/services/${svc.id}`)
       .set('Authorization', `Bearer ${token}`);

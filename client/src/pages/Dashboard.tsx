@@ -88,23 +88,24 @@ export default function Dashboard() {
           </select>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 20, marginBottom: 32 }}>
-        {cards.map(c => (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 20, marginBottom: 32 }}>
+        {cards.map((c, i) => (
           <div key={c.label} style={{
-            ...glass, padding: 24,
+            ...glass, padding: 16,
             borderLeft: `3px solid ${c.color}`,
             boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 20px ${c.color}15`,
             transition: 'transform 0.15s ease, box-shadow 0.15s ease',
             display: 'flex', flexDirection: 'column', gap: 12,
+            gridColumn: i === cards.length - 1 ? 'span 2' : undefined,
           }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 40px rgba(0,0,0,0.5), 0 0 30px ${c.color}20`; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 8px 32px rgba(0,0,0,0.4), 0 0 20px ${c.color}15`; }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ fontSize: 15, color: colors.slate, fontWeight: 500, lineHeight: 1.3 }}>{c.label}</div>
-              <div style={{ color: c.color, opacity: 0.6 }}>{cardIcons[c.label]}</div>
+              <div style={{ fontSize: 13, color: colors.slate, fontWeight: 500, lineHeight: 1.2 }}>{c.label}</div>
+              <div style={{ color: c.color, opacity: 0.6, transform: 'scale(0.85)' }}>{cardIcons[c.label]}</div>
             </div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: c.color, textShadow: `0 0 20px ${c.color}40` }}>{c.value}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: c.color, textShadow: `0 0 20px ${c.color}40` }}>{c.value}</div>
           </div>
         ))}
       </div>

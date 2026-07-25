@@ -8,7 +8,7 @@ const app = createApp();
 let token: string;
 
 beforeEach(async () => {
-  seedTestData();
+  await seedTestData();
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
@@ -65,7 +65,7 @@ describe('POST /api/guests', () => {
 describe('GET /api/guests/:id', () => {
   it('should return a guest by id', async () => {
     const db = getDb();
-    const guest = db.queryOne('SELECT id FROM guests');
+    const guest = await db.queryOne('SELECT id FROM guests');
     const res = await request(app)
       .get(`/api/guests/${guest.id}`)
       .set('Authorization', `Bearer ${token}`);
@@ -84,7 +84,7 @@ describe('GET /api/guests/:id', () => {
 describe('PUT /api/guests/:id', () => {
   it('should update a guest', async () => {
     const db = getDb();
-    const guest = db.queryOne('SELECT id FROM guests');
+    const guest = await db.queryOne('SELECT id FROM guests');
     const res = await request(app)
       .put(`/api/guests/${guest.id}`)
       .set('Authorization', `Bearer ${token}`)
@@ -97,7 +97,7 @@ describe('PUT /api/guests/:id', () => {
 describe('DELETE /api/guests/:id', () => {
   it('should delete a guest', async () => {
     const db = getDb();
-    const guest = db.queryOne('SELECT id FROM guests');
+    const guest = await db.queryOne('SELECT id FROM guests');
     const res = await request(app)
       .delete(`/api/guests/${guest.id}`)
       .set('Authorization', `Bearer ${token}`);

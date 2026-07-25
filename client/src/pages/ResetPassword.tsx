@@ -18,8 +18,8 @@ export default function ResetPassword() {
       setError('Passwords do not match');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
     setBusy(true);
@@ -85,7 +85,7 @@ export default function ResetPassword() {
             <label style={{ display: 'block', fontSize: 15, fontWeight: 600, color: colors.darker, marginBottom: 8 }}>New Password</label>
             <input
               type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="At least 6 characters" required minLength={6}
+              placeholder="At least 8 characters" required minLength={8}
               style={{ ...input, width: '100%' }}
               onFocus={e => { e.currentTarget.style.borderColor = colors.primary; e.currentTarget.style.background = colors.inputFocus; }}
               onBlur={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.background = colors.input; }}
@@ -95,7 +95,7 @@ export default function ResetPassword() {
             <label style={{ display: 'block', fontSize: 15, fontWeight: 600, color: colors.darker, marginBottom: 8 }}>Confirm Password</label>
             <input
               type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
-              placeholder="Repeat your password" required minLength={6}
+              placeholder="Repeat your password" required minLength={8}
               style={{ ...input, width: '100%' }}
               onFocus={e => { e.currentTarget.style.borderColor = colors.primary; e.currentTarget.style.background = colors.inputFocus; }}
               onBlur={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.background = colors.input; }}

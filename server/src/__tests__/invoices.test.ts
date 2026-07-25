@@ -11,7 +11,7 @@ let guestId: string;
 let roomId: string;
 
 beforeEach(async () => {
-  const ids = seedTestData();
+  const ids = await seedTestData();
   guestId = ids.guestId;
   roomId = ids.room1Id;
   const login = await request(app)
@@ -55,7 +55,7 @@ describe('POST /api/invoices/:id/pay', () => {
   it('should mark invoice as paid', async () => {
     const bookingId = await createBooking();
     const db = getDb();
-    const invoice = db.queryOne('SELECT id, amount FROM invoices WHERE booking_id = ?', [bookingId]);
+    const invoice = await db.queryOne('SELECT id, amount FROM invoices WHERE booking_id = ?', [bookingId]);
 
     const res = await request(app)
       .post(`/api/invoices/${invoice.id}/pay`)
@@ -63,7 +63,7 @@ describe('POST /api/invoices/:id/pay', () => {
       .send({ amount: invoice.amount, method: 'cash' });
     expect(res.status).toBe(201);
 
-    const updated = db.queryOne('SELECT status, paid_amount FROM invoices WHERE id = ?', [invoice.id]);
+    const updated = await db.queryOne('SELECT status, paid_amount FROM invoices WHERE id = ?', [invoice.id]);
     expect(updated.status).toBe('paid');
     expect(updated.paid_amount).toBe(invoice.amount);
   });
@@ -71,7 +71,7 @@ describe('POST /api/invoices/:id/pay', () => {
   it('should mark invoice as partial with partial payment', async () => {
     const bookingId = await createBooking();
     const db = getDb();
-    const invoice = db.queryOne('SELECT id, amount FROM invoices WHERE booking_id = ?', [bookingId]);
+    const invoice = await db.queryOne('SELECT id, amount FROM invoices WHERE booking_id = ?', [bookingId]);
 
     const res = await request(app)
       .post(`/api/invoices/${invoice.id}/pay`)
@@ -79,7 +79,7 @@ describe('POST /api/invoices/:id/pay', () => {
       .send({ amount: 100, method: 'card' });
     expect(res.status).toBe(201);
 
-    const updated = db.queryOne('SELECT status, paid_amount FROM invoices WHERE id = ?', [invoice.id]);
+    const updated = await db.queryOne('SELECT status, paid_amount FROM invoices WHERE id = ?', [invoice.id]);
     expect(updated.status).toBe('partial');
     expect(updated.paid_amount).toBe(100);
   });
@@ -95,7 +95,7 @@ describe('POST /api/invoices/:id/pay', () => {
   it('should return 400 without method', async () => {
     const bookingId = await createBooking();
     const db = getDb();
-    const invoice = db.queryOne('SELECT id FROM invoices WHERE booking_id = ?', [bookingId]);
+    const invoice = await db.queryOne('SELECT id FROM invoices WHERE booking_id = ?', [bookingId]);
 
     const res = await request(app)
       .post(`/api/invoices/${invoice.id}/pay`)
@@ -109,7 +109,7 @@ describe('PUT /api/invoices/:id', () => {
   it('should update invoice fields', async () => {
     const bookingId = await createBooking();
     const db = getDb();
-    const invoice = db.queryOne('SELECT id FROM invoices WHERE booking_id = ?', [bookingId]);
+    const invoice = await db.queryOne('SELECT id FROM invoices WHERE booking_id = ?', [bookingId]);
 
     const res = await request(app)
       .put(`/api/invoices/${invoice.id}`)

@@ -37,7 +37,7 @@ export default function CheckEmail() {
 
         <Link to="/login" style={{
           display: 'inline-block', padding: '12px 36px', borderRadius: 10, textDecoration: 'none',
-          background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+          background: `linear-gradient(135deg, ${colors.primary}, #2563eb)`,
           color: '#fff', fontSize: 16, fontWeight: 600,
           boxShadow: `0 4px 20px ${colors.primaryGlow}`,
         }}>

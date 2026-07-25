@@ -1,8 +1,10 @@
 import { CSSProperties } from 'react';
 
+const fallback = '#3b82f6';
+
 export const colors = {
-  primary: '#3b82f6',
-  primaryGlow: 'rgba(59, 130, 246, 0.3)',
+  primary: 'var(--color-primary, #3b82f6)',
+  primaryGlow: 'var(--color-primary-glow, rgba(59, 130, 246, 0.3))',
   success: '#22c55e',
   warning: '#f59e0b',
   danger: '#ef4444',
@@ -16,7 +18,7 @@ export const colors = {
   cardHover: 'rgba(25, 25, 40, 0.8)',
   nav: 'rgba(10, 10, 18, 0.85)',
   input: 'rgba(255, 255, 255, 0.06)',
-  inputFocus: 'rgba(59, 130, 246, 0.15)',
+  inputFocus: 'var(--color-input-focus, rgba(59, 130, 246, 0.15))',
 };
 
 export const glass: CSSProperties = {

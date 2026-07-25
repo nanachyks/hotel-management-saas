@@ -9,13 +9,13 @@ let token: string;
 let roomIds: string[];
 
 beforeEach(async () => {
-  const ids = seedTestData();
+  const ids = await seedTestData();
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
   token = login.body.token;
   const db = getDb();
-  const rooms = db.queryAll('SELECT id FROM rooms ORDER BY room_number');
+  const rooms = await db.queryAll('SELECT id FROM rooms ORDER BY room_number');
   roomIds = rooms.map((r: any) => r.id);
 });
 
@@ -60,7 +60,7 @@ describe('GET /api/rooms/:id', () => {
 describe('POST /api/rooms', () => {
   it('should create a new room', async () => {
     const db = getDb();
-    const types = db.queryAll('SELECT id FROM room_types');
+    const types = await db.queryAll('SELECT id FROM room_types');
     const res = await request(app)
       .post('/api/rooms')
       .set('Authorization', `Bearer ${token}`)

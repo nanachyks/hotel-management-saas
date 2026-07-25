@@ -6,7 +6,7 @@ import { AuthRequest } from '../middleware/auth.js';
 export const expensesRouter = Router();
 const db = getDb();
 
-expensesRouter.get('/', (req: AuthRequest, res: Response) => {
+expensesRouter.get('/', async (req: AuthRequest, res: Response) => {
   const { category, from, to, page: pageStr, limit: limitStr } = req.query;
   const page = Math.max(1, parseInt(pageStr as string) || 1);
   const limit = Math.min(200, Math.max(1, parseInt(limitStr as string) || 200));
@@ -24,40 +24,40 @@ expensesRouter.get('/', (req: AuthRequest, res: Response) => {
   query += ' ORDER BY date DESC LIMIT ? OFFSET ?';
   params.push(String(limit), String(offset));
 
-  const expenses = db.queryAll(query, params);
-  const { total } = db.queryOne(countQuery, countParams) || { total: 0 };
+  const expenses = await db.queryAll(query, params);
+  const { total } = (await db.queryOne(countQuery, countParams)) || { total: 0 };
   res.json({ data: expenses, total, page, limit });
 });
 
-expensesRouter.post('/', (req: AuthRequest, res: Response) => {
+expensesRouter.post('/', async (req: AuthRequest, res: Response) => {
   const { category, description, amount, date, notes } = req.body;
   if (!description || !amount) return res.status(400).json({ error: 'description and amount are required' });
 
   const id = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO expenses (id, hotel_id, category, description, amount, date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [id, req.user!.hotel_id, category || 'other', description, Number(amount), date || new Date().toISOString().split('T')[0], notes || '']
   );
-  const created = db.queryOne('SELECT * FROM expenses WHERE id = ?', [id]);
+  const created = await db.queryOne('SELECT * FROM expenses WHERE id = ?', [id]);
   res.status(201).json(created);
 });
 
-expensesRouter.put('/:id', (req: AuthRequest, res: Response) => {
-  const existing = db.queryOne('SELECT * FROM expenses WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+expensesRouter.put('/:id', async (req: AuthRequest, res: Response) => {
+  const existing = await db.queryOne('SELECT * FROM expenses WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Expense not found' });
 
   const { category, description, amount, date, notes } = req.body;
-  db.execute(
+  await db.execute(
     'UPDATE expenses SET category = ?, description = ?, amount = ?, date = ?, notes = ? WHERE id = ? AND hotel_id = ?',
     [category ?? existing.category, description ?? existing.description, amount ?? existing.amount, date ?? existing.date, notes ?? existing.notes, req.params.id, req.user!.hotel_id]
   );
-  const updated = db.queryOne('SELECT * FROM expenses WHERE id = ?', [req.params.id]);
+  const updated = await db.queryOne('SELECT * FROM expenses WHERE id = ?', [req.params.id]);
   res.json(updated);
 });
 
-expensesRouter.delete('/:id', (req: AuthRequest, res: Response) => {
-  const existing = db.queryOne('SELECT * FROM expenses WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+expensesRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
+  const existing = await db.queryOne('SELECT * FROM expenses WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Expense not found' });
-  db.execute('DELETE FROM expenses WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
+  await db.execute('DELETE FROM expenses WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   res.json({ message: 'Expense deleted' });
 });

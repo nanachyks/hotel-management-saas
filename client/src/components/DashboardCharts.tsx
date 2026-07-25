@@ -11,7 +11,7 @@ interface ChartData {
   monthlyOccupancy: { month: string; rate: number }[];
 }
 
-const chartColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const chartColors = ['var(--color-primary, #3b82f6)', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 const tooltipStyle = {
   background: 'rgba(18,18,30,0.95)',
@@ -32,15 +32,15 @@ export function RevenueChart({ data }: { data: ChartData['revenueTrend'] }) {
         <AreaChart data={data}>
           <defs>
             <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--color-primary, #3b82f6)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="var(--color-primary, #3b82f6)" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4" />
           <XAxis dataKey="month" tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
           <YAxis tickFormatter={v => `GHS ${v}`} tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
           <Tooltip contentStyle={tooltipStyle} formatter={formatRevenue as any} />
-          <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#revGrad)" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} />
+          <Area type="monotone" dataKey="revenue" stroke="var(--color-primary, #3b82f6)" fill="url(#revGrad)" strokeWidth={2} dot={{ fill: 'var(--color-primary, #3b82f6)', r: 3 }} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

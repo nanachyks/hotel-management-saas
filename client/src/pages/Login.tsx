@@ -135,7 +135,7 @@ export default function Login() {
           </div>
           <button type="submit" disabled={busy} style={{
             width: '100%', padding: '12px', borderRadius: 10, border: 'none',
-            background: busy ? 'rgba(59,130,246,0.3)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            background: busy ? 'var(--color-primary-glow, rgba(59,130,246,0.3))' : `linear-gradient(135deg, ${colors.primary}, #2563eb)`,
             color: '#fff', fontSize: 16, fontWeight: 600,
             cursor: busy ? 'not-allowed' : 'pointer',
             boxShadow: busy ? 'none' : `0 4px 20px ${colors.primaryGlow}`,

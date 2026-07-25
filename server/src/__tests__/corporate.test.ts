@@ -9,7 +9,7 @@ let token: string;
 let hotelId: string;
 
 beforeEach(async () => {
-  const ids = seedTestData();
+  const ids = await seedTestData();
   hotelId = ids.hotelId;
   const login = await request(app)
     .post('/api/auth/login')
@@ -86,7 +86,7 @@ describe('Corporate Accounts', () => {
 
   it('POST /api/corporate/:id/rates - should create a corporate rate', async () => {
     const db = getDb();
-    const types = db.queryAll('SELECT id FROM room_types');
+    const types = await db.queryAll('SELECT id FROM room_types');
     const create = await request(app)
       .post('/api/corporate')
       .set('Authorization', `Bearer ${token}`)
@@ -102,7 +102,7 @@ describe('Corporate Accounts', () => {
 
   it('DELETE /api/corporate/rates/:rateId - should delete a corporate rate', async () => {
     const db = getDb();
-    const types = db.queryAll('SELECT id FROM room_types');
+    const types = await db.queryAll('SELECT id FROM room_types');
     const create = await request(app)
       .post('/api/corporate')
       .set('Authorization', `Bearer ${token}`)

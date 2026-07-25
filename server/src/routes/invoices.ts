@@ -8,7 +8,7 @@ import { createNotification } from './notifications.js';
 export const invoicesRouter = Router();
 const db = getDb();
 
-invoicesRouter.get('/', (req: AuthRequest, res: Response) => {
+invoicesRouter.get('/', async (req: AuthRequest, res: Response) => {
   const { status, page: pageStr, limit: limitStr } = req.query;
   const hasPagination = pageStr !== undefined;
   const page = Math.max(1, parseInt(pageStr as string) || 1);
@@ -37,8 +37,8 @@ invoicesRouter.get('/', (req: AuthRequest, res: Response) => {
   query += ' ORDER BY i.created_at DESC LIMIT ? OFFSET ?';
   params.push(String(limit), String(offset));
 
-  const invoices = db.queryAll(query, params);
-  const { total } = db.queryOne(countQuery, countParams) || { total: 0 };
+  const invoices = await db.queryAll(query, params);
+  const { total } = (await db.queryOne(countQuery, countParams)) || { total: 0 };
 
   if (hasPagination) {
     res.json({ data: invoices, total, page, limit });
@@ -47,9 +47,9 @@ invoicesRouter.get('/', (req: AuthRequest, res: Response) => {
   }
 });
 
-invoicesRouter.get('/:id', (req: AuthRequest, res: Response) => {
+invoicesRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const invoice = db.queryOne(`
+  const invoice = await db.queryOne(`
     SELECT i.*, b.check_in_date, b.check_out_date, b.status as booking_status,
            g.first_name || ' ' || g.last_name as guest_name, g.email as guest_email, g.phone as guest_phone,
            r.room_number, rt.name as room_type_name, h.name as hotel_name, h.address as hotel_address, h.email as hotel_email, h.phone as hotel_phone, h.currency, h.tax_rate
@@ -63,8 +63,8 @@ invoicesRouter.get('/:id', (req: AuthRequest, res: Response) => {
   `, [req.params.id, String(hotelId)]);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  const payments = db.queryAll('SELECT * FROM payments WHERE invoice_id = ? ORDER BY created_at ASC', [req.params.id]);
-  const services = db.queryAll(`
+  const payments = await db.queryAll('SELECT * FROM payments WHERE invoice_id = ? ORDER BY created_at ASC', [req.params.id]);
+  const services = await db.queryAll(`
     SELECT bs.*, s.name as service_name, s.category
     FROM booking_services bs JOIN services s ON bs.service_id = s.id
     WHERE bs.booking_id = ?
@@ -74,12 +74,12 @@ invoicesRouter.get('/:id', (req: AuthRequest, res: Response) => {
 });
 
 // Record a payment
-invoicesRouter.post('/:id/pay', (req: AuthRequest, res: Response) => {
+invoicesRouter.post('/:id/pay', async (req: AuthRequest, res: Response) => {
   const { amount, method, reference, notes } = req.body;
   if (!amount || !method) return res.status(400).json({ error: 'amount and method are required' });
 
   const hotelId = req.user?.hotel_id;
-  const invoice = db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const invoice = await db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
   if (invoice.status === 'paid' || invoice.status === 'cancelled') return res.status(400).json({ error: 'Invoice is already paid or cancelled' });
 
@@ -87,25 +87,25 @@ invoicesRouter.post('/:id/pay', (req: AuthRequest, res: Response) => {
   if (!validMethods.includes(method)) return res.status(400).json({ error: 'Invalid payment method' });
 
   const paymentId = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO payments (id, invoice_id, amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?)',
     [paymentId, req.params.id, Number(amount), method, reference || '', notes || '']
   );
 
   const newPaid = invoice.paid_amount + Number(amount);
   const newStatus = newPaid >= invoice.amount ? 'paid' : 'partial';
-  db.execute('UPDATE invoices SET paid_amount = ?, status = ? WHERE id = ? AND hotel_id = ?', [newPaid, newStatus, req.params.id, String(hotelId)]);
+  await db.execute('UPDATE invoices SET paid_amount = ?, status = ? WHERE id = ? AND hotel_id = ?', [newPaid, newStatus, req.params.id, String(hotelId)]);
 
-  const payment = db.queryOne('SELECT * FROM payments WHERE id = ?', [paymentId]);
-  createNotification(String(hotelId), 'payment', 'Payment Received', `${method.replace('_', ' ')} payment of ${Number(amount).toFixed(2)} recorded`, `/invoices`);
+  const payment = await db.queryOne('SELECT * FROM payments WHERE id = ?', [paymentId]);
+  await createNotification(String(hotelId), 'payment', 'Payment Received', `${method.replace('_', ' ')} payment of ${Number(amount).toFixed(2)} recorded`, `/invoices`);
   res.status(201).json(payment);
 });
 
 // Refund (full or partial)
-invoicesRouter.post('/:id/refund', (req: AuthRequest, res: Response) => {
+invoicesRouter.post('/:id/refund', async (req: AuthRequest, res: Response) => {
   const { amount } = req.body;
   const hotelId = req.user?.hotel_id;
-  const invoice = db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const invoice = await db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
   if (invoice.paid_amount <= 0) return res.status(400).json({ error: 'No payments to refund' });
 
@@ -114,20 +114,20 @@ invoicesRouter.post('/:id/refund', (req: AuthRequest, res: Response) => {
   const newStatus = newPaid <= 0 ? 'refunded' : 'partial';
 
   const paymentId = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO payments (id, invoice_id, amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?)',
     [paymentId, req.params.id, -refundAmount, 'cash', 'REFUND', 'Refund processed']
   );
 
-  db.execute('UPDATE invoices SET paid_amount = ?, status = ? WHERE id = ? AND hotel_id = ?', [newPaid, newStatus, req.params.id, String(hotelId)]);
+  await db.execute('UPDATE invoices SET paid_amount = ?, status = ? WHERE id = ? AND hotel_id = ?', [newPaid, newStatus, req.params.id, String(hotelId)]);
 
   res.json({ message: 'Refund processed', refundAmount, newPaid, newStatus });
 });
 
 // Receipt PDF
-invoicesRouter.get('/:id/receipt', (req: AuthRequest, res: Response) => {
+invoicesRouter.get('/:id/receipt', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const invoice = db.queryOne(`
+  const invoice = await db.queryOne(`
     SELECT i.*, b.check_in_date, b.check_out_date, b.status as booking_status,
            g.first_name || ' ' || g.last_name as guest_name, g.email as guest_email, g.phone as guest_phone,
            r.room_number, rt.name as room_type_name, h.name as hotel_name, h.address as hotel_address,
@@ -142,8 +142,8 @@ invoicesRouter.get('/:id/receipt', (req: AuthRequest, res: Response) => {
   `, [req.params.id, String(hotelId)]);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  const payments = db.queryAll('SELECT * FROM payments WHERE invoice_id = ? ORDER BY created_at ASC', [req.params.id]);
-  const services = db.queryAll(`
+  const payments = await db.queryAll('SELECT * FROM payments WHERE invoice_id = ? ORDER BY created_at ASC', [req.params.id]);
+  const services = await db.queryAll(`
     SELECT bs.*, s.name as service_name, s.category
     FROM booking_services bs JOIN services s ON bs.service_id = s.id
     WHERE bs.booking_id = ?
@@ -216,7 +216,8 @@ invoicesRouter.get('/:id/receipt', (req: AuthRequest, res: Response) => {
     doc.fontSize(9).font('Helvetica');
     for (const p of payments) {
       const method = p.amount > 0 ? p.method.replace('_', ' ') : 'Refund';
-      doc.text(`${p.created_at?.slice(0, 10)} - ${method}: ${invoice.currency || 'USD'} ${Math.abs(p.amount).toFixed(2)}`, leftX, doc.y);
+      const createdDate = p.created_at instanceof Date ? p.created_at.toISOString().slice(0, 10) : String(p.created_at ?? '').slice(0, 10);
+      doc.text(`${createdDate} - ${method}: ${invoice.currency || 'USD'} ${Math.abs(p.amount).toFixed(2)}`, leftX, doc.y);
     }
   }
 
@@ -227,16 +228,16 @@ invoicesRouter.get('/:id/receipt', (req: AuthRequest, res: Response) => {
   doc.end();
 });
 
-invoicesRouter.put('/:id', (req: AuthRequest, res: Response) => {
+invoicesRouter.put('/:id', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const existing = db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const existing = await db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   if (!existing) return res.status(404).json({ error: 'Invoice not found' });
 
   const { amount, paid_amount, discount, tax_amount, deposit, notes, status, due_date } = req.body;
-  db.execute(
+  await db.execute(
     'UPDATE invoices SET amount = ?, paid_amount = ?, discount = ?, tax_amount = ?, deposit = ?, notes = ?, status = ?, due_date = ? WHERE id = ? AND hotel_id = ?',
     [amount ?? existing.amount, paid_amount ?? existing.paid_amount, discount ?? existing.discount, tax_amount ?? existing.tax_amount, deposit ?? existing.deposit, notes ?? existing.notes, status ?? existing.status, due_date ?? existing.due_date, req.params.id, String(hotelId)]
   );
-  const updated = db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const updated = await db.queryOne('SELECT * FROM invoices WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   res.json(updated);
 });

@@ -1,36 +1,40 @@
 import { Router, Response } from 'express';
 import { getDb } from '../db.js';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, authenticate, requireRole } from '../middleware/auth.js';
 
 export const currenciesRouter = Router();
 const db = getDb();
 
-currenciesRouter.get('/', (_req: AuthRequest, res: Response) => {
-  const currencies = db.queryAll('SELECT * FROM currencies ORDER BY code ASC');
+currenciesRouter.use(authenticate);
+
+currenciesRouter.get('/', async (_req: AuthRequest, res: Response) => {
+  const currencies = await db.queryAll('SELECT * FROM currencies ORDER BY code ASC');
   res.json(currencies);
 });
 
-currenciesRouter.get('/rates', (req: AuthRequest, res: Response) => {
-  const rates = db.queryAll('SELECT * FROM exchange_rates ORDER BY from_currency, to_currency');
+currenciesRouter.get('/rates', async (req: AuthRequest, res: Response) => {
+  const rates = await db.queryAll('SELECT * FROM exchange_rates ORDER BY from_currency, to_currency');
   res.json(rates);
 });
 
-currenciesRouter.put('/rates', (req: AuthRequest, res: Response) => {
+// These write global, platform-wide reference data shared by every tenant —
+// restrict to admin/owner rather than any authenticated user.
+currenciesRouter.put('/rates', requireRole('admin', 'owner'), async (req: AuthRequest, res: Response) => {
   const { rates } = req.body;
   if (!Array.isArray(rates)) return res.status(400).json({ error: 'rates array required' });
 
   for (const r of rates) {
-    const existing = db.queryOne('SELECT id FROM exchange_rates WHERE from_currency = ? AND to_currency = ?', [r.from, r.to]);
+    const existing = await db.queryOne('SELECT id FROM exchange_rates WHERE from_currency = ? AND to_currency = ?', [r.from, r.to]);
     if (existing) {
-      db.execute("UPDATE exchange_rates SET rate = ?, updated_at = datetime('now') WHERE from_currency = ? AND to_currency = ?", [r.rate, r.from, r.to]);
+      await db.execute("UPDATE exchange_rates SET rate = ?, updated_at = NOW() WHERE from_currency = ? AND to_currency = ?", [r.rate, r.from, r.to]);
     } else {
-      db.execute('INSERT INTO exchange_rates (from_currency, to_currency, rate) VALUES (?, ?, ?)', [r.from, r.to, r.rate]);
+      await db.execute('INSERT INTO exchange_rates (from_currency, to_currency, rate) VALUES (?, ?, ?)', [r.from, r.to, r.rate]);
     }
   }
   res.json({ message: 'Exchange rates updated' });
 });
 
-currenciesRouter.post('/seed', async (req: AuthRequest, res: Response) => {
+currenciesRouter.post('/seed', requireRole('admin', 'owner'), async (req: AuthRequest, res: Response) => {
   const initial = [
     { code: 'GHS', name: 'Ghana Cedi', symbol: 'GHs' },
     { code: 'USD', name: 'US Dollar', symbol: '$' },
@@ -39,7 +43,7 @@ currenciesRouter.post('/seed', async (req: AuthRequest, res: Response) => {
     { code: 'GBP', name: 'British Pound', symbol: '£' },
   ];
   for (const c of initial) {
-    db.execute('INSERT OR IGNORE INTO currencies (code, name, symbol) VALUES (?, ?, ?)', [c.code, c.name, c.symbol]);
+    await db.execute('INSERT INTO currencies (code, name, symbol) VALUES (?, ?, ?) ON CONFLICT (code) DO NOTHING', [c.code, c.name, c.symbol]);
   }
   const baseRates = [
     { from: 'USD', to: 'GHS', rate: 15.50 },
@@ -57,8 +61,8 @@ currenciesRouter.post('/seed', async (req: AuthRequest, res: Response) => {
     { from: 'GBP', to: 'GBP', rate: 1 },
   ];
   for (const r of baseRates) {
-    db.execute('INSERT OR IGNORE INTO exchange_rates (from_currency, to_currency, rate) VALUES (?, ?, ?)', [r.from, r.to, r.rate]);
+    await db.execute('INSERT INTO exchange_rates (from_currency, to_currency, rate) VALUES (?, ?, ?) ON CONFLICT (from_currency, to_currency) DO NOTHING', [r.from, r.to, r.rate]);
   }
-  const currencies = db.queryAll('SELECT * FROM currencies ORDER BY code');
+  const currencies = await db.queryAll('SELECT * FROM currencies ORDER BY code');
   res.json({ message: 'Currencies seeded', currencies });
 });

@@ -61,7 +61,7 @@ interface ReportData {
 
 const methodLabels: Record<string, string> = { cash: 'Cash', card: 'Card', mobile_money: 'Mobile Money', bank_transfer: 'Bank Transfer' };
 
-const chartColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
+const chartColors = ['var(--color-primary, #3b82f6)', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
   const tooltipStyle = {
   background: 'rgba(18,18,30,0.95)',
   backdropFilter: 'blur(12px)',
@@ -110,9 +110,9 @@ export default function Reports() {
   const summaryCards = [
     { label: 'Occupancy', value: `${data.occupancy.currentRate}%`, sub: `${data.occupancy.nightsSold} / ${data.occupancy.nightsAvailable} nights`, color: '#8b5cf6', icon: <BedDouble size={20} /> },
     { label: 'ADR', value: f(data.adr), sub: 'Avg Daily Rate', color: '#06b6d4', icon: <DollarSign size={20} /> },
-    { label: 'RevPAR', value: f(data.revpar), sub: 'Rev Per Available Room', color: '#3b82f6', icon: <TrendingUp size={20} /> },
+    { label: 'RevPAR', value: f(data.revpar), sub: 'Rev Per Available Room', color: colors.primary as string, icon: <TrendingUp size={20} /> },
     { label: 'Daily Sales', value: f(data.dailySales.total), sub: `Today (${data.dailySales.date})`, color: '#22c55e', icon: <DollarSign size={20} /> },
-    { label: 'Monthly Sales', value: f(data.monthlySales.total), sub: 'This month', color: '#3b82f6', icon: <BarChart3 size={20} /> },
+    { label: 'Monthly Sales', value: f(data.monthlySales.total), sub: 'This month', color: colors.primary as string, icon: <BarChart3 size={20} /> },
     { label: 'Total Revenue', value: f(data.totalRevenue.total), sub: `Tax: ${f(data.totalRevenue.tax)}`, color: '#10b981', icon: <TrendingUp size={20} /> },
     { label: 'Total Expenses', value: f(data.totalExpenses), sub: '', color: '#ef4444', icon: <TrendingDown size={20} /> },
     { label: 'Net Profit', value: f(data.netRevenue), sub: `${profitMargin}% margin`, color: data.netRevenue >= 0 ? '#22c55e' : '#ef4444', icon: <DollarSign size={20} /> },
@@ -131,12 +131,12 @@ export default function Reports() {
         {data.monthlyRevenue.length > 0 ? (
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={data.monthlyRevenue}>
-              <defs><linearGradient id="revG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
+              <defs><linearGradient id="revG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--color-primary, #3b82f6)" stopOpacity={0.3} /><stop offset="95%" stopColor="var(--color-primary, #3b82f6)" stopOpacity={0} /></linearGradient></defs>
               <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4" />
               <XAxis dataKey="month" tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={v => `${v / 1000}k`} tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} formatter={formatRev} />
-              <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#revG)" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} />
+              <YAxis tickFormatter={v => `GHS ${v}`} tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} formatter={formatRev as any} />
+              <Area type="monotone" dataKey="revenue" stroke="var(--color-primary, #3b82f6)" fill="url(#revG)" strokeWidth={2} dot={{ fill: 'var(--color-primary, #3b82f6)', r: 3 }} />
             </AreaChart>
           </ResponsiveContainer>
         ) : <p style={{ color: colors.slate }}>No revenue data yet.</p>}
@@ -239,12 +239,12 @@ export default function Reports() {
       {data.monthlyRevenue.length > 0 ? (
         <ResponsiveContainer width="100%" height={320}>
           <AreaChart data={data.monthlyRevenue}>
-            <defs><linearGradient id="revG2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
+            <defs><linearGradient id="revG2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--color-primary, #3b82f6)" stopOpacity={0.3} /><stop offset="95%" stopColor="var(--color-primary, #3b82f6)" stopOpacity={0} /></linearGradient></defs>
             <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4" />
             <XAxis dataKey="month" tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={v => formatCurrency(v)} tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={tooltipStyle} formatter={formatRev} />
-            <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#revG2)" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} />
+            <YAxis tickFormatter={v => `GHS ${v}`} tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={tooltipStyle} formatter={formatRev as any} />
+            <Area type="monotone" dataKey="revenue" stroke="var(--color-primary, #3b82f6)" fill="url(#revG2)" strokeWidth={2} dot={{ fill: 'var(--color-primary, #3b82f6)', r: 3 }} />
           </AreaChart>
         </ResponsiveContainer>
       ) : <p style={{ color: colors.slate }}>No revenue data yet.</p>}
@@ -325,7 +325,7 @@ export default function Reports() {
                 <XAxis dataKey="month" tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: colors.slate, fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
-                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} name="Bookings" />
+                <Bar dataKey="count" fill="var(--color-primary, #3b82f6)" radius={[4, 4, 0, 0]} maxBarSize={40} name="Bookings" />
               </BarChart>
             </ResponsiveContainer>
           ) : <p style={{ color: colors.slate }}>No booking trend data yet.</p>}

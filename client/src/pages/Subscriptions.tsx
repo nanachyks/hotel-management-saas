@@ -145,7 +145,7 @@ export default function Subscriptions() {
           }}>Monthly</button>
           <button onClick={() => setYearly(true)} style={{
             padding: '8px 24px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14,
-            background: yearly ? '#3b82f6' : 'transparent', color: yearly ? '#fff' : colors.slate,
+            background: yearly ? 'var(--color-primary, #3b82f6)' : 'transparent', color: yearly ? '#fff' : colors.slate,
             transition: 'all 0.15s ease', position: 'relative',
           }}>
             Yearly
@@ -168,7 +168,7 @@ export default function Subscriptions() {
               position: 'relative', transform: plan.highlighted ? 'scale(1.02)' : 'none',
             }}>
               {plan.highlighted ? (
-                <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', padding: '4px 16px', borderRadius: 999, letterSpacing: '0.05em' }}>Most Popular</div>
+                <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg, var(--color-primary, #3b82f6), #8b5cf6)`, color: '#fff', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', padding: '4px 16px', borderRadius: 999, letterSpacing: '0.05em' }}>Most Popular</div>
               ) : null}
 
               <div style={{ fontSize: 14, color: colors.warning, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{plan.name}</div>
@@ -200,7 +200,7 @@ export default function Subscriptions() {
               ) : (
                 <button onClick={() => handleSubscribe(plan.id, isFree)} disabled={subscribing === plan.id} style={{
                   padding: '12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 15,
-                  background: plan.highlighted ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'rgba(255,255,255,0.06)',
+                  background: plan.highlighted ? `linear-gradient(135deg, var(--color-primary, #3b82f6), #2563eb)` : 'rgba(255,255,255,0.06)',
                   color: plan.highlighted ? '#fff' : colors.dark, transition: 'all 0.2s ease', opacity: subscribing === plan.id ? 0.6 : 1,
                 }}>
                   {subscribing === plan.id ? 'Processing...' : isFree ? 'Start Free Trial' : `Pay with Paystack (GHs ${displayPrice})`}

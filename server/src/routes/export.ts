@@ -38,9 +38,9 @@ function addTable(doc: PDFKit.PDFDocument, headers: string[], rows: string[][]) 
 }
 
 // ── Bookings ──
-exportRouter.get('/bookings/csv', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/bookings/csv', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const bookings = db.queryAll(`
+  const bookings = await db.queryAll(`
     SELECT b.id, b.check_in_date, b.check_out_date, b.status, b.total_amount,
       g.first_name || ' ' || g.last_name as guest, r.room_number
     FROM bookings b JOIN guests g ON b.guest_id = g.id JOIN rooms r ON b.room_id = r.id
@@ -57,9 +57,9 @@ exportRouter.get('/bookings/csv', authenticate, (req: AuthRequest, res: Response
   res.send(csv);
 });
 
-exportRouter.get('/bookings/pdf', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/bookings/pdf', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const bookings = db.queryAll(`
+  const bookings = await db.queryAll(`
     SELECT b.id, b.check_in_date, b.check_out_date, b.status, b.total_amount,
       g.first_name || ' ' || g.last_name as guest, r.room_number
     FROM bookings b JOIN guests g ON b.guest_id = g.id JOIN rooms r ON b.room_id = r.id
@@ -78,10 +78,10 @@ exportRouter.get('/bookings/pdf', authenticate, (req: AuthRequest, res: Response
 });
 
 // ── Invoices ──
-exportRouter.get('/invoices/csv', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/invoices/csv', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const invoices = db.queryAll(`
-    SELECT i.id, i.amount, i.paid_amount, i.status, i.issued_date, i.due_date,
+  const invoices = await db.queryAll(`
+    SELECT i.id, i.amount, i.paid_amount, i.status, TO_CHAR(i.issued_date, 'YYYY-MM-DD') as issued_date, i.due_date,
       g.first_name || ' ' || g.last_name as guest
     FROM invoices i JOIN bookings b ON i.booking_id = b.id JOIN guests g ON b.guest_id = g.id
     WHERE i.hotel_id = ?
@@ -97,10 +97,10 @@ exportRouter.get('/invoices/csv', authenticate, (req: AuthRequest, res: Response
   res.send(csv);
 });
 
-exportRouter.get('/invoices/pdf', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/invoices/pdf', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const invoices = db.queryAll(`
-    SELECT i.id, i.amount, i.paid_amount, i.status, i.issued_date, i.due_date,
+  const invoices = await db.queryAll(`
+    SELECT i.id, i.amount, i.paid_amount, i.status, TO_CHAR(i.issued_date, 'YYYY-MM-DD') as issued_date, i.due_date,
       g.first_name || ' ' || g.last_name as guest
     FROM invoices i JOIN bookings b ON i.booking_id = b.id JOIN guests g ON b.guest_id = g.id
     WHERE i.hotel_id = ?
@@ -118,9 +118,9 @@ exportRouter.get('/invoices/pdf', authenticate, (req: AuthRequest, res: Response
 });
 
 // ── Guests ──
-exportRouter.get('/guests/csv', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/guests/csv', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const guests = db.queryAll('SELECT id, first_name, last_name, email, phone, id_card_number FROM guests WHERE hotel_id = ? ORDER BY first_name', [String(hotelId)]);
+  const guests = await db.queryAll('SELECT id, first_name, last_name, email, phone, id_card_number FROM guests WHERE hotel_id = ? ORDER BY first_name', [String(hotelId)]);
   const csv = toCSV(
     ['ID', 'First Name', 'Last Name', 'Email', 'Phone', 'ID Card'],
     guests,
@@ -131,9 +131,9 @@ exportRouter.get('/guests/csv', authenticate, (req: AuthRequest, res: Response) 
   res.send(csv);
 });
 
-exportRouter.get('/guests/pdf', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/guests/pdf', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const guests = db.queryAll('SELECT id, first_name, last_name, email, phone, id_card_number FROM guests WHERE hotel_id = ? ORDER BY first_name', [String(hotelId)]);
+  const guests = await db.queryAll('SELECT id, first_name, last_name, email, phone, id_card_number FROM guests WHERE hotel_id = ? ORDER BY first_name', [String(hotelId)]);
   const doc = new PDFDocument({ margin: 45, size: 'A4' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="guests.pdf"');
@@ -146,9 +146,9 @@ exportRouter.get('/guests/pdf', authenticate, (req: AuthRequest, res: Response) 
 });
 
 // ── Services ──
-exportRouter.get('/services/csv', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/services/csv', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const services = db.queryAll('SELECT id, name, description, price, category FROM services WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
+  const services = await db.queryAll('SELECT id, name, description, price, category FROM services WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
   const csv = toCSV(
     ['ID', 'Name', 'Description', 'Price', 'Category'],
     services,
@@ -159,9 +159,9 @@ exportRouter.get('/services/csv', authenticate, (req: AuthRequest, res: Response
   res.send(csv);
 });
 
-exportRouter.get('/services/pdf', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/services/pdf', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const services = db.queryAll('SELECT id, name, description, price, category FROM services WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
+  const services = await db.queryAll('SELECT id, name, description, price, category FROM services WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
   const doc = new PDFDocument({ margin: 45, size: 'A4' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="services.pdf"');
@@ -174,9 +174,9 @@ exportRouter.get('/services/pdf', authenticate, (req: AuthRequest, res: Response
 });
 
 // ── Room Types ──
-exportRouter.get('/room-types/csv', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/room-types/csv', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const types = db.queryAll('SELECT id, name, description, base_price, capacity FROM room_types WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
+  const types = await db.queryAll('SELECT id, name, description, base_price, capacity FROM room_types WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
   const csv = toCSV(
     ['ID', 'Name', 'Description', 'Base Price', 'Capacity'],
     types,
@@ -187,9 +187,9 @@ exportRouter.get('/room-types/csv', authenticate, (req: AuthRequest, res: Respon
   res.send(csv);
 });
 
-exportRouter.get('/room-types/pdf', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/room-types/pdf', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const types = db.queryAll('SELECT id, name, description, base_price, capacity FROM room_types WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
+  const types = await db.queryAll('SELECT id, name, description, base_price, capacity FROM room_types WHERE hotel_id = ? ORDER BY name', [String(hotelId)]);
   const doc = new PDFDocument({ margin: 45, size: 'A4' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="room-types.pdf"');
@@ -202,26 +202,26 @@ exportRouter.get('/room-types/pdf', authenticate, (req: AuthRequest, res: Respon
 });
 
 // ── Reports Summary ──
-exportRouter.get('/reports/summary/csv', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/reports/summary/csv', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
 
-  const totalRevenue = db.queryOne(
+  const totalRevenue = await db.queryOne(
     'SELECT COALESCE(SUM(i.paid_amount),0) as total, COALESCE(SUM(i.tax_amount),0) as tax FROM invoices i WHERE i.hotel_id = ? AND i.status = ?',
     [String(hotelId), 'paid']
   );
 
-  const totalExpenses = db.queryOne(
+  const totalExpenses = await db.queryOne(
     'SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE hotel_id = ?',
     [String(hotelId)]
   );
 
-  const roomCount = db.queryOne(
+  const roomCount = await db.queryOne(
     'SELECT COUNT(*) as count FROM rooms WHERE hotel_id = ?',
     [String(hotelId)]
   );
 
-  const occ = db.queryOne(`
-    SELECT COALESCE(SUM(julianday(b.check_out_date) - julianday(b.check_in_date)),0) as nights_sold
+  const occ = await db.queryOne(`
+    SELECT COALESCE(SUM(b.check_out_date::date - b.check_in_date::date),0) as nights_sold
     FROM bookings b WHERE b.hotel_id = ? AND b.status IN ('checked_in','checked_out')
   `, [String(hotelId)]);
 
@@ -259,9 +259,9 @@ exportRouter.get('/reports/summary/csv', authenticate, (req: AuthRequest, res: R
 });
 
 // ── Rooms ──
-exportRouter.get('/rooms/csv', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/rooms/csv', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const rooms = db.queryAll(`
+  const rooms = await db.queryAll(`
     SELECT r.id, r.room_number, r.floor, r.status, rt.name as type, rt.base_price
     FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id WHERE r.hotel_id = ? ORDER BY r.room_number
   `, [String(hotelId)]);
@@ -275,9 +275,9 @@ exportRouter.get('/rooms/csv', authenticate, (req: AuthRequest, res: Response) =
   res.send(csv);
 });
 
-exportRouter.get('/rooms/pdf', authenticate, (req: AuthRequest, res: Response) => {
+exportRouter.get('/rooms/pdf', authenticate, async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const rooms = db.queryAll(`
+  const rooms = await db.queryAll(`
     SELECT r.id, r.room_number, r.floor, r.status, rt.name as type, rt.base_price
     FROM rooms r JOIN room_types rt ON r.room_type_id = rt.id WHERE r.hotel_id = ? ORDER BY r.room_number
   `, [String(hotelId)]);
@@ -291,5 +291,3 @@ exportRouter.get('/rooms/pdf', authenticate, (req: AuthRequest, res: Response) =
   );
   doc.end();
 });
-
-

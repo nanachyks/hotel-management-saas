@@ -12,7 +12,8 @@ RUN apk add --no-cache tini
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist/ ./dist/
-RUN mkdir -p data uploads/rooms
+COPY migrations/ ./migrations/
+RUN mkdir -p uploads/rooms
 EXPOSE 3001
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/index.js"]

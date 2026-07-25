@@ -7,12 +7,12 @@ services:
       - "3001:3001"
     environment:
       - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - EMAIL_FROM=${EMAIL_FROM:-HotelEase <noreply@hotease.com>}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:80}
     volumes:
-      - hotel-data:/app/data
       - hotel-uploads:/app/uploads
     restart: unless-stopped
 
@@ -27,5 +27,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  hotel-data:
   hotel-uploads:

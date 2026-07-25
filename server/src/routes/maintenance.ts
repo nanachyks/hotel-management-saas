@@ -7,7 +7,7 @@ import { createNotification } from './notifications.js';
 export const maintenanceRouter = Router();
 const db = getDb();
 
-maintenanceRouter.get('/', (req: AuthRequest, res: Response) => {
+maintenanceRouter.get('/', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
   const { status, priority, room_id, assigned_to } = req.query;
   let query = `SELECT m.*, r.room_number, r.room_number || ' - ' || rt.name as room_info,
@@ -25,45 +25,62 @@ maintenanceRouter.get('/', (req: AuthRequest, res: Response) => {
   if (room_id) { query += ' AND m.room_id = ?'; params.push(room_id as string); }
   if (assigned_to) { query += ' AND m.assigned_to = ?'; params.push(assigned_to as string); }
   query += ' ORDER BY m.created_at DESC';
-  const requests = db.queryAll(query, params);
+  const requests = await db.queryAll(query, params);
   res.json(requests);
 });
 
-maintenanceRouter.post('/', (req: AuthRequest, res: Response) => {
+maintenanceRouter.post('/', async (req: AuthRequest, res: Response) => {
   const { room_id, reported_by, title, description, priority, assigned_to, notes } = req.body;
   if (!title) return res.status(400).json({ error: 'title is required' });
   const hotelId = req.user?.hotel_id;
+  if (room_id) {
+    const room = await db.queryOne('SELECT id FROM rooms WHERE id = ? AND hotel_id = ?', [room_id, String(hotelId)]);
+    if (!room) return res.status(400).json({ error: 'Room not found' });
+  }
+  for (const empId of [reported_by, assigned_to]) {
+    if (empId && !(await db.queryOne('SELECT id FROM employees WHERE id = ? AND hotel_id = ?', [empId, String(hotelId)]))) {
+      return res.status(400).json({ error: 'Employee not found' });
+    }
+  }
   const id = uuid();
-  db.execute(
+  await db.execute(
     'INSERT INTO maintenance_requests (id, hotel_id, room_id, reported_by, title, description, priority, assigned_to, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [id, String(hotelId), room_id || null, reported_by || null, title, description || '', priority || 'medium', assigned_to || null, notes || '']
   );
-  const created = db.queryOne(`SELECT m.*, r.room_number FROM maintenance_requests m LEFT JOIN rooms r ON m.room_id = r.id WHERE m.id = ?`, [id]);
+  const created = await db.queryOne(`SELECT m.*, r.room_number FROM maintenance_requests m LEFT JOIN rooms r ON m.room_id = r.id WHERE m.id = ?`, [id]);
   if (priority === 'urgent' || priority === 'high') {
-    createNotification(String(hotelId), 'maintenance', `${priority === 'urgent' ? 'Urgent' : 'High'} Maintenance`, `${title} - ${created.room_number ? `Room ${created.room_number}` : 'Common area'}`, `/maintenance`);
+    await createNotification(String(hotelId), 'maintenance', `${priority === 'urgent' ? 'Urgent' : 'High'} Maintenance`, `${title} - ${created.room_number ? `Room ${created.room_number}` : 'Common area'}`, `/maintenance`);
   }
   res.status(201).json(created);
 });
 
-maintenanceRouter.put('/:id', (req: AuthRequest, res: Response) => {
+maintenanceRouter.put('/:id', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const existing = db.queryOne('SELECT * FROM maintenance_requests WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const existing = await db.queryOne('SELECT * FROM maintenance_requests WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   if (!existing) return res.status(404).json({ error: 'Maintenance request not found' });
   const { room_id, title, description, priority, status, assigned_to, notes } = req.body;
-  db.execute(
+  if (room_id) {
+    const room = await db.queryOne('SELECT id FROM rooms WHERE id = ? AND hotel_id = ?', [room_id, String(hotelId)]);
+    if (!room) return res.status(400).json({ error: 'Room not found' });
+  }
+  if (assigned_to) {
+    const employee = await db.queryOne('SELECT id FROM employees WHERE id = ? AND hotel_id = ?', [assigned_to, String(hotelId)]);
+    if (!employee) return res.status(400).json({ error: 'Employee not found' });
+  }
+  await db.execute(
     'UPDATE maintenance_requests SET room_id = ?, title = ?, description = ?, priority = ?, status = ?, assigned_to = ?, notes = ? WHERE id = ? AND hotel_id = ?',
     [room_id ?? existing.room_id, title ?? existing.title, description ?? existing.description,
      priority ?? existing.priority, status ?? existing.status, assigned_to ?? existing.assigned_to,
      notes ?? existing.notes, req.params.id, String(hotelId)]
   );
-  const updated = db.queryOne(`SELECT m.*, r.room_number FROM maintenance_requests m LEFT JOIN rooms r ON m.room_id = r.id WHERE m.id = ?`, [req.params.id]);
+  const updated = await db.queryOne(`SELECT m.*, r.room_number FROM maintenance_requests m LEFT JOIN rooms r ON m.room_id = r.id WHERE m.id = ?`, [req.params.id]);
   res.json(updated);
 });
 
-maintenanceRouter.delete('/:id', (req: AuthRequest, res: Response) => {
+maintenanceRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const existing = db.queryOne('SELECT * FROM maintenance_requests WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  const existing = await db.queryOne('SELECT * FROM maintenance_requests WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   if (!existing) return res.status(404).json({ error: 'Maintenance request not found' });
-  db.execute('DELETE FROM maintenance_requests WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
+  await db.execute('DELETE FROM maintenance_requests WHERE id = ? AND hotel_id = ?', [req.params.id, String(hotelId)]);
   res.json({ message: 'Maintenance request deleted' });
 });

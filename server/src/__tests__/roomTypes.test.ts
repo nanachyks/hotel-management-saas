@@ -8,7 +8,7 @@ const app = createApp();
 let token: string;
 
 beforeEach(async () => {
-  seedTestData();
+  await seedTestData();
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
@@ -48,7 +48,7 @@ describe('POST /api/room-types', () => {
 describe('PUT /api/room-types/:id', () => {
   it('should update a room type', async () => {
     const db = getDb();
-    const types = db.queryAll('SELECT id FROM room_types');
+    const types = await db.queryAll('SELECT id FROM room_types');
     const res = await request(app)
       .put(`/api/room-types/${types[0].id}`)
       .set('Authorization', `Bearer ${token}`)
@@ -67,12 +67,23 @@ describe('PUT /api/room-types/:id', () => {
 });
 
 describe('DELETE /api/room-types/:id', () => {
-  it('should delete a room type', async () => {
+  it('should delete a room type with no rooms assigned', async () => {
+    const created = await request(app)
+      .post('/api/room-types')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Unused Type', base_price: 100 });
+    const res = await request(app)
+      .delete(`/api/room-types/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('should reject deleting a room type with rooms assigned', async () => {
     const db = getDb();
-    const types = db.queryAll('SELECT id FROM room_types');
+    const types = await db.queryAll('SELECT id FROM room_types');
     const res = await request(app)
       .delete(`/api/room-types/${types[0].id}`)
       .set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
   });
 });

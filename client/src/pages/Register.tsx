@@ -66,7 +66,7 @@ export default function Register() {
             { label: 'Hotel Name', key: 'hotel_name' as const, type: 'text', placeholder: 'Your Hotel Name' },
             { label: 'Email', key: 'email' as const, type: 'email', placeholder: 'john@example.com' },
             { label: 'Username', key: 'username' as const, type: 'text', placeholder: 'Choose a username' },
-            { label: 'Password', key: 'password' as const, type: 'password', placeholder: 'Create a password', minLength: 6 },
+            { label: 'Password', key: 'password' as const, type: 'password', placeholder: 'Create a password', minLength: 8 },
           ].map(field => (
             <div key={field.key} style={{ marginBottom: field.key === 'password' ? 28 : 20 }}>
               <label style={{ display: 'block', fontSize: 15, fontWeight: 600, color: colors.darker, marginBottom: 8 }}>{field.label}</label>
@@ -83,7 +83,7 @@ export default function Register() {
           ))}
           <button type="submit" disabled={busy} style={{
             width: '100%', padding: '12px', borderRadius: 10, border: 'none',
-            background: busy ? 'rgba(59,130,246,0.3)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            background: busy ? 'var(--color-primary-glow, rgba(59,130,246,0.3))' : `linear-gradient(135deg, ${colors.primary}, #2563eb)`,
             color: '#fff', fontSize: 16, fontWeight: 600,
             cursor: busy ? 'not-allowed' : 'pointer',
             boxShadow: busy ? 'none' : `0 4px 20px ${colors.primaryGlow}`,

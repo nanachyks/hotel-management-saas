@@ -9,16 +9,16 @@ const db = getDb();
 
 subscriptionsRouter.use(authenticate);
 
-subscriptionsRouter.get('/plans', (_req: AuthRequest, res: Response) => {
-  const plans = db.queryAll(
+subscriptionsRouter.get('/plans', async (_req: AuthRequest, res: Response) => {
+  const plans = await db.queryAll(
     'SELECT * FROM subscription_plans ORDER BY sort_order ASC'
   );
   res.json({ data: plans });
 });
 
-subscriptionsRouter.get('/', (req: AuthRequest, res: Response) => {
+subscriptionsRouter.get('/', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const sub = db.queryOne(`
+  const sub = await db.queryOne(`
     SELECT hs.*, sp.name as plan_name, sp.slug as plan_slug, sp.description as plan_description,
       sp.price_monthly, sp.price_yearly, sp.max_rooms, sp.max_users, sp.features, sp.highlighted
     FROM hotel_subscriptions hs
@@ -27,11 +27,11 @@ subscriptionsRouter.get('/', (req: AuthRequest, res: Response) => {
   `, [String(hotelId)]);
 
   if (!sub) {
-    const freePlan = db.queryOne("SELECT * FROM subscription_plans WHERE slug = 'free_trial' ORDER BY sort_order ASC LIMIT 1");
+    const freePlan = await db.queryOne("SELECT * FROM subscription_plans WHERE slug = 'free_trial' ORDER BY sort_order ASC LIMIT 1");
     return res.json({ data: null, defaultPlan: freePlan || null });
   }
 
-  const usage = db.queryOne(`
+  const usage = await db.queryOne(`
     SELECT
       (SELECT COUNT(*) FROM rooms WHERE hotel_id = ?) as room_count,
       (SELECT COUNT(*) FROM users WHERE hotel_id = ?) as user_count
@@ -41,7 +41,7 @@ subscriptionsRouter.get('/', (req: AuthRequest, res: Response) => {
 });
 
 // Direct subscribe — only for free plans
-subscriptionsRouter.post('/', (req: AuthRequest, res: Response) => {
+subscriptionsRouter.post('/', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
   const { plan_id, billing_interval } = req.body;
 
@@ -50,7 +50,7 @@ subscriptionsRouter.post('/', (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const plan = db.queryOne('SELECT * FROM subscription_plans WHERE id = ?', [plan_id]);
+  const plan = await db.queryOne('SELECT * FROM subscription_plans WHERE id = ?', [plan_id]);
   if (!plan) {
     res.status(404).json({ error: 'Plan not found' });
     return;
@@ -64,19 +64,19 @@ subscriptionsRouter.post('/', (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const existing = db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [String(hotelId)]);
+  const existing = await db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [String(hotelId)]);
   const periodEnd = new Date();
   interval === 'yearly' ? periodEnd.setFullYear(periodEnd.getFullYear() + 1) : periodEnd.setMonth(periodEnd.getMonth() + 1);
 
   if (existing) {
-    db.execute(
-      `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = datetime('now') WHERE hotel_id = ?`,
+    await db.execute(
+      `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = NOW() WHERE hotel_id = ?`,
       [plan_id, interval, periodEnd.toISOString().split('T')[0], String(hotelId)]
     );
   } else {
-    db.execute(
+    await db.execute(
       `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, current_period_starts_at, current_period_ends_at)
-       VALUES (?, ?, ?, ?, 'active', datetime('now'), ?)`,
+       VALUES (?, ?, ?, ?, 'active', NOW(), ?)`,
       [uuid(), String(hotelId), plan_id, interval, periodEnd.toISOString().split('T')[0]]
     );
   }
@@ -100,7 +100,7 @@ subscriptionsRouter.post('/initialize-payment', async (req: AuthRequest, res: Re
     return;
   }
 
-  const plan = db.queryOne('SELECT * FROM subscription_plans WHERE id = ?', [plan_id]);
+  const plan = await db.queryOne('SELECT * FROM subscription_plans WHERE id = ?', [plan_id]);
   if (!plan) {
     res.status(404).json({ error: 'Plan not found' });
     return;
@@ -135,7 +135,7 @@ subscriptionsRouter.post('/initialize-payment', async (req: AuthRequest, res: Re
 
     // Store payment record
     const paymentId = uuid();
-    db.execute(
+    await db.execute(
       `INSERT INTO subscription_payments (id, hotel_id, plan_id, amount, currency, billing_interval, paystack_reference, paystack_access_code, status)
        VALUES (?, ?, ?, ?, 'GHS', ?, ?, ?, 'pending')`,
       [paymentId, String(hotelId), plan_id, amount, interval, result.reference, result.access_code]
@@ -163,7 +163,7 @@ subscriptionsRouter.post('/verify-payment', async (req: AuthRequest, res: Respon
 
   try {
     const verification = await verifyTransaction(reference);
-    const payment = db.queryOne(
+    const payment = await db.queryOne(
       'SELECT * FROM subscription_payments WHERE paystack_reference = ?',
       [reference]
     );
@@ -182,29 +182,29 @@ subscriptionsRouter.post('/verify-payment', async (req: AuthRequest, res: Respon
         periodEnd.setMonth(periodEnd.getMonth() + 1);
       }
 
-      const existing = db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [String(hotelId)]);
+      const existing = await db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [String(hotelId)]);
       if (existing) {
-        db.execute(
-          `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = datetime('now') WHERE hotel_id = ?`,
+        await db.execute(
+          `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = NOW() WHERE hotel_id = ?`,
           [payment.plan_id, payment.billing_interval, periodEnd.toISOString().split('T')[0], String(hotelId)]
         );
       } else {
-        db.execute(
+        await db.execute(
           `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, current_period_starts_at, current_period_ends_at)
-           VALUES (?, ?, ?, ?, 'active', datetime('now'), ?)`,
+           VALUES (?, ?, ?, ?, 'active', NOW(), ?)`,
           [uuid(), String(hotelId), payment.plan_id, payment.billing_interval, periodEnd.toISOString().split('T')[0]]
         );
       }
 
-      db.execute(
-        `UPDATE subscription_payments SET status = 'success', paid_at = datetime('now') WHERE id = ?`,
+      await db.execute(
+        `UPDATE subscription_payments SET status = 'success', paid_at = NOW() WHERE id = ?`,
         [payment.id]
       );
 
-      const plan = db.queryOne('SELECT name FROM subscription_plans WHERE id = ?', [payment.plan_id]);
+      const plan = await db.queryOne('SELECT name FROM subscription_plans WHERE id = ?', [payment.plan_id]);
       res.json({ success: true, message: `Subscribed to ${plan?.name || 'plan'} successfully!` });
     } else {
-      db.execute(
+      await db.execute(
         `UPDATE subscription_payments SET status = 'failed' WHERE id = ?`,
         [payment.id]
       );
@@ -238,13 +238,13 @@ subscriptionsRouter.post('/paystack-webhook', async (req: AuthRequest | any, res
 
     if (hotelId && planId && reference) {
       // Check if already processed
-      const existing = db.queryOne(
+      const existing = await db.queryOne(
         'SELECT id FROM subscription_payments WHERE paystack_reference = ? AND status = ?',
         [reference, 'success']
       );
 
       if (!existing) {
-        const payment = db.queryOne(
+        const payment = await db.queryOne(
           'SELECT * FROM subscription_payments WHERE paystack_reference = ?',
           [reference]
         );
@@ -257,22 +257,22 @@ subscriptionsRouter.post('/paystack-webhook', async (req: AuthRequest | any, res
             periodEnd.setMonth(periodEnd.getMonth() + 1);
           }
 
-          const subExisting = db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [hotelId]);
+          const subExisting = await db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [hotelId]);
           if (subExisting) {
-            db.execute(
-              `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = datetime('now') WHERE hotel_id = ?`,
+            await db.execute(
+              `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = NOW() WHERE hotel_id = ?`,
               [planId, interval, periodEnd.toISOString().split('T')[0], hotelId]
             );
           } else {
-            db.execute(
+            await db.execute(
               `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, current_period_starts_at, current_period_ends_at)
-               VALUES (?, ?, ?, ?, 'active', datetime('now'), ?)`,
+               VALUES (?, ?, ?, ?, 'active', NOW(), ?)`,
               [uuid(), hotelId, planId, interval, periodEnd.toISOString().split('T')[0]]
             );
           }
 
-          db.execute(
-            `UPDATE subscription_payments SET status = 'success', paid_at = datetime('now') WHERE id = ?`,
+          await db.execute(
+            `UPDATE subscription_payments SET status = 'success', paid_at = NOW() WHERE id = ?`,
             [payment.id]
           );
         }
@@ -283,18 +283,18 @@ subscriptionsRouter.post('/paystack-webhook', async (req: AuthRequest | any, res
   res.sendStatus(200);
 });
 
-subscriptionsRouter.post('/cancel', (req: AuthRequest, res: Response) => {
+subscriptionsRouter.post('/cancel', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  db.execute(
-    `UPDATE hotel_subscriptions SET status = 'cancelled', cancelled_at = datetime('now'), updated_at = datetime('now') WHERE hotel_id = ?`,
+  await db.execute(
+    `UPDATE hotel_subscriptions SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW() WHERE hotel_id = ?`,
     [String(hotelId)]
   );
   res.json({ success: true, message: 'Subscription cancelled' });
 });
 
-subscriptionsRouter.get('/check-limits', (req: AuthRequest, res: Response) => {
+subscriptionsRouter.get('/check-limits', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;
-  const sub = db.queryOne(`
+  const sub = await db.queryOne(`
     SELECT sp.max_rooms, sp.max_users
     FROM hotel_subscriptions hs
     JOIN subscription_plans sp ON hs.plan_id = sp.id
@@ -306,8 +306,8 @@ subscriptionsRouter.get('/check-limits', (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const roomCount = db.queryOne('SELECT COUNT(*) as count FROM rooms WHERE hotel_id = ?', [String(hotelId)]);
-  const userCount = db.queryOne('SELECT COUNT(*) as count FROM users WHERE hotel_id = ?', [String(hotelId)]);
+  const roomCount = await db.queryOne('SELECT COUNT(*) as count FROM rooms WHERE hotel_id = ?', [String(hotelId)]);
+  const userCount = await db.queryOne('SELECT COUNT(*) as count FROM users WHERE hotel_id = ?', [String(hotelId)]);
 
   res.json({
     allowed: true,
@@ -330,8 +330,8 @@ subscriptionsRouter.get('/config', (req: AuthRequest, res: Response) => {
   });
 });
 
-export function getPlanLimits(hotelId: string): { maxRooms: number; maxUsers: number } {
-  const sub = db.queryOne(`
+export async function getPlanLimits(hotelId: string): Promise<{ maxRooms: number; maxUsers: number }> {
+  const sub = await db.queryOne(`
     SELECT sp.max_rooms, sp.max_users
     FROM hotel_subscriptions hs
     JOIN subscription_plans sp ON hs.plan_id = sp.id

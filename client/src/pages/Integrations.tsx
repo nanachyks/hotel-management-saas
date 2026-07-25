@@ -88,7 +88,7 @@ export default function Integrations() {
   const sync = async (id: string) => {
     setSyncing(id);
     try {
-      const res = await api.post<any>(`/integrations/${id}/sync`);
+      const res = await api.post<any>(`/integrations/${id}/sync`, {});
       toast(`${res.message}: ${res.roomsSynced || res.recentPayments?.count || res.exportReady?.count || res.menuItems || res.rooms || 0} items synced`, 'success');
       load();
     } catch (e: any) { toast(e.message, 'error'); }
@@ -187,7 +187,7 @@ export default function Integrations() {
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => sync(int.id)} disabled={syncing === int.id}
-                    style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4, color: '#3b82f6' }}>
+                    style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4, color: colors.primary }}>
                     <RefreshCw size={14} className={syncing === int.id ? 'spin' : ''} /> Sync
                   </button>
                   <button onClick={() => openEdit(int)} style={{ ...btnSm, color: colors.slate }}>Edit</button>
