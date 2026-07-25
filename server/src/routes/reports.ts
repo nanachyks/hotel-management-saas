@@ -56,7 +56,7 @@ reportsRouter.get('/summary', async (req: AuthRequest, res: Response) => {
     SELECT COALESCE(SUM(check_out_date::date - check_in_date::date), 0) as nights
     FROM bookings
     WHERE hotel_id = ? AND status IN ('checked_in', 'checked_out')
-      AND check_out_date >= ? AND check_in_date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date
+      AND check_out_date >= ? AND check_in_date::date <= (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date
   `, [String(hotelId), monthStr]);
 
   const occupancyRate = totalRoomNights > 0

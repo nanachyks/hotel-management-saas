@@ -11,6 +11,7 @@ import { bookingsRouter } from '../routes/bookings.js';
 import { servicesRouter } from '../routes/services.js';
 import { invoicesRouter } from '../routes/invoices.js';
 import { dashboardRouter } from '../routes/dashboard.js';
+import { reportsRouter } from '../routes/reports.js';
 import { exportRouter } from '../routes/export.js';
 import corporateRouter from '../routes/corporate.js';
 import franchiseRouter from '../routes/franchise.js';
@@ -32,6 +33,7 @@ export function createApp() {
   app.use('/api/services', authenticate, servicesRouter);
   app.use('/api/invoices', authenticate, invoicesRouter);
   app.use('/api/dashboard', authenticate, dashboardRouter);
+  app.use('/api/reports', authenticate, reportsRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/export', authenticate, exportRouter);
   app.use('/api/corporate', authenticate, corporateRouter);
