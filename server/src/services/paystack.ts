@@ -24,7 +24,7 @@ async function request(method: string, path: string, body?: any): Promise<Paysta
 export interface InitTransactionParams {
   email: string;
   amount: number; // in pesewas (GHS 29 = 2900)
-  callback_url: string;
+  callback_url?: string; // omit to fall back to the callback URL configured in the Paystack dashboard
   metadata?: Record<string, any>;
 }
 
@@ -38,7 +38,7 @@ export async function initializeTransaction(params: InitTransactionParams): Prom
   const res = await request('POST', '/transaction/initialize', {
     email: params.email,
     amount: params.amount,
-    callback_url: params.callback_url,
+    ...(params.callback_url ? { callback_url: params.callback_url } : {}),
     metadata: params.metadata || {},
   });
   if (!res.status || !res.data) {

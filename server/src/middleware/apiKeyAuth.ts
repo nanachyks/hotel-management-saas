@@ -28,7 +28,8 @@ export async function authenticateApiKey(req: ApiKeyRequest, res: Response, next
   }
 
   const record = await db.queryOne('SELECT * FROM api_keys WHERE key = ?', [key]);
-  if (!record || !record.enabled || !timingSafeEqual(record.secret, secret)) {
+  const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
+  if (!record || !record.enabled || !timingSafeEqual(record.secret_hash, secretHash)) {
     return res.status(401).json({ error: 'Invalid API key or secret' });
   }
 

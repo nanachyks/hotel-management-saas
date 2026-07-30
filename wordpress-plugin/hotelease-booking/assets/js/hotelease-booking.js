@@ -5,6 +5,15 @@
   }
 
   onReady(function () {
+    // Guest returning from Paystack's hosted checkout page. The webhook (server-to-server)
+    // is what actually confirms the booking and sends the email — this is just messaging.
+    if (/[?&]reference=/.test(window.location.search)) {
+      document.querySelectorAll('.hotelease-form-message').forEach(function (messageEl) {
+        messageEl.className = 'hotelease-form-message hotelease-success';
+        messageEl.textContent = 'Payment received! We\'re confirming your booking — a confirmation email is on its way shortly.';
+      });
+    }
+
     var forms = document.querySelectorAll('.hotelease-booking-form');
     forms.forEach(function (form) {
       form.addEventListener('submit', function (e) {
@@ -34,6 +43,7 @@
           last_name: data.get('last_name'),
           email: data.get('email'),
           phone: data.get('phone'),
+          return_url: window.location.href,
         };
 
         submitBtn.disabled = true;
@@ -46,22 +56,26 @@
         })
           .then(function (r) { return r.json(); })
           .then(function (res) {
-            if (res.success) {
-              var b = res.data;
+            if (res.success && res.data && res.data.payment && res.data.payment.authorization_url) {
               messageEl.classList.add('hotelease-success');
-              messageEl.textContent = 'Booked! Room ' + b.room_number + ' (' + b.room_type + '), '
-                + b.check_in_date + ' to ' + b.check_out_date + ' — total ' + b.total_amount + '. A confirmation email is on its way.';
-              form.reset();
+              messageEl.textContent = 'Redirecting you to complete payment…';
+              window.location.href = res.data.payment.authorization_url;
+              // Leave the button disabled — the page is navigating away.
+              return;
+            }
+            if (res.success) {
+              messageEl.classList.add('hotelease-error');
+              messageEl.textContent = 'Booking created but payment could not be started. Please contact the hotel.';
             } else {
               messageEl.classList.add('hotelease-error');
               messageEl.textContent = (res.data && res.data.message) || 'Something went wrong. Please try again.';
             }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Check Availability & Book';
           })
           .catch(function () {
             messageEl.classList.add('hotelease-error');
             messageEl.textContent = 'Network error. Please try again.';
-          })
-          .finally(function () {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Check Availability & Book';
           });

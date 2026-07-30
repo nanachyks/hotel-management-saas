@@ -88,15 +88,17 @@ class HotelEase_API_Client {
         return $this->request('GET', '/availability', array('query' => $query));
     }
 
-    /** @return array|WP_Error Booking confirmation details */
-    public function create_booking($room_type_id, $check_in, $check_out, $guest) {
-        return $this->request('POST', '/bookings', array(
-            'body' => array(
-                'room_type_id'   => $room_type_id,
-                'check_in_date'  => $check_in,
-                'check_out_date' => $check_out,
-                'guest'          => $guest,
-            ),
-        ));
+    /** @return array|WP_Error Pending booking + Paystack authorization_url to redirect the guest to */
+    public function create_booking($room_type_id, $check_in, $check_out, $guest, $callback_url = '') {
+        $body = array(
+            'room_type_id'   => $room_type_id,
+            'check_in_date'  => $check_in,
+            'check_out_date' => $check_out,
+            'guest'          => $guest,
+        );
+        if ($callback_url) {
+            $body['callback_url'] = $callback_url;
+        }
+        return $this->request('POST', '/bookings', array('body' => $body));
     }
 }

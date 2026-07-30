@@ -7,6 +7,10 @@ if (!defined('ABSPATH')) {
  * Handles the booking form submission. Open to logged-out visitors
  * (nopriv) since this is a public-facing booking widget; protected by
  * a nonce plus the usual HotelEase API-key auth on the server side.
+ *
+ * The booking created here is only "pending" — the response carries a Paystack
+ * authorization_url that the browser (hotelease-booking.js) redirects the guest to.
+ * The booking is confirmed server-side once Paystack's webhook reports payment.
  */
 function hotelease_booking_handle_submit() {
     check_ajax_referer('hotelease_booking_nonce', 'nonce');
@@ -18,6 +22,11 @@ function hotelease_booking_handle_submit() {
     $last_name    = isset($_POST['last_name']) ? sanitize_text_field(wp_unslash($_POST['last_name'])) : '';
     $email        = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
     $phone        = isset($_POST['phone']) ? sanitize_text_field(wp_unslash($_POST['phone'])) : '';
+    // Where Paystack sends the guest back to after paying — the booking page they came from.
+    $return_url   = isset($_POST['return_url']) ? esc_url_raw(wp_unslash($_POST['return_url'])) : '';
+    if ($return_url && wp_http_validate_url($return_url) === false) {
+        $return_url = '';
+    }
 
     if (!$room_type_id || !$check_in || !$check_out || !$first_name || !$last_name || !$email || !$phone) {
         wp_send_json_error(array('message' => 'Please fill in all fields.'), 400);
@@ -44,7 +53,7 @@ function hotelease_booking_handle_submit() {
         'last_name'  => $last_name,
         'email'      => $email,
         'phone'      => $phone,
-    ));
+    ), $return_url);
 
     if (is_wp_error($result)) {
         wp_send_json_error(array('message' => $result->get_error_message()), 502);

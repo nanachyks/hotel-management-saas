@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db.js';
 import { verifyWebhookSignature } from '../services/paystack.js';
 import { activateSubscriptionForPayment } from './subscriptions.js';
+import { confirmBookingPayment } from './public.js';
 
 export const paystackWebhookRouter = Router();
 const db = getDb();
@@ -23,14 +24,20 @@ paystackWebhookRouter.post('/', async (req: RawBodyRequest, res: Response) => {
   if (event.event === 'charge.success') {
     const { reference, metadata } = event.data;
     const hotelId = metadata?.hotel_id;
-    const planId = metadata?.plan_id;
 
-    if (hotelId && planId && reference) {
+    if (hotelId && reference && metadata?.type === 'booking' && metadata?.booking_id) {
+      const payment = await db.queryOne(
+        'SELECT * FROM booking_payments WHERE paystack_reference = ?',
+        [reference]
+      );
+      if (payment && payment.status !== 'success') {
+        await confirmBookingPayment(payment);
+      }
+    } else if (hotelId && metadata?.plan_id && reference) {
       const payment = await db.queryOne(
         'SELECT * FROM subscription_payments WHERE paystack_reference = ?',
         [reference]
       );
-
       if (payment && payment.status !== 'success') {
         await activateSubscriptionForPayment(payment);
       }

@@ -10,6 +10,10 @@ import { createNotification } from './notifications.js';
 export const bookingsRouter = Router();
 const db = getDb();
 
+// Postgres SQLSTATE for a violated exclusion constraint (see the
+// no_overlapping_bookings constraint added in migrations/0004).
+const EXCLUSION_VIOLATION = '23P01';
+
 const BOOKING_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'] as const;
 const BOOKING_SOURCES = ['walk_in', 'online', 'phone', 'corporate', 'group'] as const;
 
@@ -206,10 +210,17 @@ bookingsRouter.post('/', validate(createBookingSchema), async (req: AuthRequest,
   const totalAmount = nights * roomType.base_price;
 
   const id = uuid();
-  await db.execute(
-    'INSERT INTO bookings (id, hotel_id, guest_id, room_id, check_in_date, check_out_date, total_amount, source, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [id, req.user!.hotel_id, guest_id, room_id, check_in_date, check_out_date, totalAmount, source, status]
-  );
+  try {
+    await db.execute(
+      'INSERT INTO bookings (id, hotel_id, guest_id, room_id, check_in_date, check_out_date, total_amount, source, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, req.user!.hotel_id, guest_id, room_id, check_in_date, check_out_date, totalAmount, source, status]
+    );
+  } catch (err: any) {
+    if (err.code === EXCLUSION_VIOLATION) {
+      return res.status(409).json({ error: 'Room is already booked for these dates' });
+    }
+    throw err;
+  }
 
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 7);
@@ -240,6 +251,20 @@ bookingsRouter.put('/:id', validate(updateBookingSchema), async (req: AuthReques
 
   const { check_in_date, check_out_date, status, source } = req.body;
 
+  // Run the update that's subject to the overlap constraint first, before any side effects
+  // (room status changes, emails, notifications) fire — so a conflict leaves nothing to undo.
+  try {
+    await db.execute(
+      "UPDATE bookings SET check_in_date = ?, check_out_date = ?, status = ?, source = ?, updated_at = NOW() WHERE id = ? AND hotel_id = ?",
+      [check_in_date ?? existing.check_in_date, check_out_date ?? existing.check_out_date, status ?? existing.status, source ?? existing.source, req.params.id, req.user!.hotel_id]
+    );
+  } catch (err: any) {
+    if (err.code === EXCLUSION_VIOLATION) {
+      return res.status(409).json({ error: 'Room is already booked for these dates' });
+    }
+    throw err;
+  }
+
   if (status === 'checked_in') {
     await db.execute("UPDATE rooms SET status = 'occupied', updated_at = NOW() WHERE id = ?", [existing.room_id]);
     const guest = await db.queryOne('SELECT * FROM guests WHERE id = ?', [existing.guest_id]);
@@ -261,11 +286,6 @@ bookingsRouter.put('/:id', validate(updateBookingSchema), async (req: AuthReques
       await createNotification(req.user!.hotel_id, 'cancellation', 'Booking Cancelled', `Booking for ${existing.guest_name} was cancelled`, `/bookings/${req.params.id}`);
     }
   }
-
-  await db.execute(
-    "UPDATE bookings SET check_in_date = ?, check_out_date = ?, status = ?, source = ?, updated_at = NOW() WHERE id = ? AND hotel_id = ?",
-    [check_in_date ?? existing.check_in_date, check_out_date ?? existing.check_out_date, status ?? existing.status, source ?? existing.source, req.params.id, req.user!.hotel_id]
-  );
 
   if (status === 'checked_out') {
     const invoice = await db.queryOne('SELECT * FROM invoices WHERE booking_id = ?', [req.params.id]);

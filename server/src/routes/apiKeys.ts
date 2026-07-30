@@ -26,6 +26,7 @@ const updateApiKeySchema = z.object({
 
 function generateApiKey() { return 'he_' + crypto.randomBytes(24).toString('hex'); }
 function generateSecret() { return crypto.randomBytes(32).toString('hex'); }
+function hashSecret(secret: string) { return crypto.createHash('sha256').update(secret).digest('hex'); }
 
 // List API keys
 router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -42,8 +43,8 @@ router.post('/', validate(createApiKeySchema), async (req: AuthRequest, res: Res
     const id = uuid();
     const key = generateApiKey();
     const secret = generateSecret();
-    await db.execute('INSERT INTO api_keys (id, hotel_id, name, key, secret, permissions, ip_whitelist, rate_limit) VALUES (?,?,?,?,?,?,?,?)',
-      [id, req.user!.hotel_id, name, key, secret, JSON.stringify(permissions), JSON.stringify(ip_whitelist), rate_limit]);
+    await db.execute('INSERT INTO api_keys (id, hotel_id, name, key, secret_hash, permissions, ip_whitelist, rate_limit) VALUES (?,?,?,?,?,?,?,?)',
+      [id, req.user!.hotel_id, name, key, hashSecret(secret), JSON.stringify(permissions), JSON.stringify(ip_whitelist), rate_limit]);
     // Return secret only on creation
     res.json({ id, key, secret, name });
   } catch (e: any) { next(e); }
@@ -75,7 +76,7 @@ router.post('/:id/regenerate', async (req: AuthRequest, res: Response, next: Nex
     const existing = await db.queryOne('SELECT id FROM api_keys WHERE id=? AND hotel_id=?', [req.params.id, req.user!.hotel_id]);
     if (!existing) return res.status(404).json({ error: 'API key not found' });
     const secret = generateSecret();
-    await db.execute('UPDATE api_keys SET secret=? WHERE id=? AND hotel_id=?', [secret, req.params.id, req.user!.hotel_id]);
+    await db.execute('UPDATE api_keys SET secret_hash=? WHERE id=? AND hotel_id=?', [hashSecret(secret), req.params.id, req.user!.hotel_id]);
     res.json({ secret });
   } catch (e: any) { next(e); }
 });

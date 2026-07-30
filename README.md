@@ -4,7 +4,7 @@ A comprehensive hotel management platform built with Node.js/Express + React/Vit
 
 ## Stack
 
-- **Backend:** Node.js, Express, TypeScript, SQLite (sql.js)
+- **Backend:** Node.js, Express, TypeScript, PostgreSQL (pg)
 - **Frontend:** React 18, TypeScript, Vite 5, Recharts, React Router v6
 - **Auth:** JWT + bcryptjs, role-based access control
 - **Payments:** Paystack integration
@@ -40,7 +40,7 @@ npm run dev
 
 # Or run individually:
 npm run dev:server   # Backend on :3001
-npm run dev:client   # Frontend on :5173
+npm run dev:client   # Frontend on :3000
 ```
 
 ### Docker
@@ -68,7 +68,7 @@ npm run test:client
 │   │   ├── services/     # Email, payments, AI/ML
 │   │   ├── types/        # TypeScript interfaces
 │   │   └── __tests__/    # Backend tests
-│   └── data/             # SQLite database
+│   └── migrations/       # Postgres schema migrations (npm run migrate)
 ├── docker-compose.yml
 └── package.json
 ```

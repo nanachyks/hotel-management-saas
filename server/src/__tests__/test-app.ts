@@ -18,12 +18,18 @@ import franchiseRouter from '../routes/franchise.js';
 import rolesRouter from '../routes/roles.js';
 import apiKeysRouter from '../routes/apiKeys.js';
 import whiteLabelRouter from '../routes/whiteLabel.js';
+import { publicRouter } from '../routes/public.js';
+import { paystackWebhookRouter } from '../routes/paystackWebhook.js';
+import { authenticateApiKey } from '../middleware/apiKeyAuth.js';
 import { errorHandler } from '../middleware/errorHandler.js';
 
 export function createApp() {
   const app = express();
   app.use(cors());
-  app.use(express.json());
+  // Mirrors index.ts: the Paystack webhook needs the raw request body to verify its signature.
+  app.use(express.json({
+    verify: (req: any, _res, buf) => { req.rawBody = buf; },
+  }));
 
   app.use('/api/auth', authRouter);
   app.use('/api/room-types', authenticate, roomTypesRouter);
@@ -41,6 +47,8 @@ export function createApp() {
   app.use('/api/roles', authenticate, rolesRouter);
   app.use('/api/api-keys', authenticate, apiKeysRouter);
   app.use('/api/white-label', authenticate, whiteLabelRouter);
+  app.use('/api/subscriptions/paystack-webhook', paystackWebhookRouter);
+  app.use('/api/public', authenticateApiKey, publicRouter);
 
   app.use(errorHandler);
   return app;
