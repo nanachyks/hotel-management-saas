@@ -21,13 +21,12 @@ Edit `server/.env` with your values:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | **Yes** | Postgres connection string (e.g. Supabase pooled connection string) |
-| `JWT_SECRET` | **Yes** | Random 64-char hex string (`openssl rand -hex 32`) |
-| `JWT_REFRESH_SECRET` | **Yes** | Random 64-char hex string |
+| `JWT_SECRET` | **Yes** | Random 64-char hex string (`openssl rand -hex 32`) — generate a fresh one for production, never reuse a dev value |
 | `RESEND_API_KEY` | No | Resend.com key for transactional emails |
-| `PAYSTACK_SECRET_KEY` | No | Paystack secret for payment processing |
+| `PAYSTACK_SECRET_KEY` | No | Paystack secret for payment processing (use a live key, not test, for real payments) |
 | `PAYSTACK_PUBLIC_KEY` | No | Paystack public key for frontend |
-| `NEXT_PUBLIC_APP_URL` | No | Your app URL (for Paystack callback) |
-| `CORS_ORIGINS` | No | Comma-separated allowed origins (default: `http://localhost:5173`) |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins (default: `http://localhost:5173`). Not needed if the backend serves the frontend itself (same-origin) — see step 2. |
+| `TRUST_PROXY` | If behind a proxy | Number of trusted hops (e.g. `1`) when running behind Railway/Render/Fly/nginx/a load balancer |
 | `PORT` | No | Server port (default: `3001`) |
 | `SUPABASE_URL` | For room photos | Supabase project URL (Settings → API), used for room-photo storage |
 | `SUPABASE_SERVICE_ROLE_KEY` | For room photos | Supabase service-role secret key (Settings → API) — keep this secret, it bypasses RLS |
@@ -41,11 +40,16 @@ Edit `server/.env` with your values:
 npm run install:all
 
 # Build the frontend
-cd client && npm run build
+cd client && npm run build && cd ..
 
-# The server serves the built client from client/dist
-# Make sure client/dist exists after build
+# Build the server
+cd server && npm run build && cd ..
 ```
+
+The server automatically serves the built client from `client/dist` (with an SPA fallback for
+client-side routes) whenever that folder exists — no separate static host required. In local
+dev, `client/dist` doesn't exist, so this is a no-op there and the Vite dev server (port 3000,
+proxying `/api` to the backend) is used instead.
 
 ---
 
@@ -103,7 +107,28 @@ pm2 startup
 
 ## 4. Nginx Reverse Proxy (Manual Deploy)
 
-If deploying without Docker, place an nginx config like:
+Since the Node server now serves the built client itself, the simplest nginx config just proxies
+everything to it:
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+Set `TRUST_PROXY=1` in this case, so the app sees the real client IP from `X-Forwarded-For`.
+
+If you'd rather have nginx serve static assets directly (skips a hop to Node for JS/CSS/images):
 
 ```nginx
 server {

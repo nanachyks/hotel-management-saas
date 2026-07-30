@@ -4,6 +4,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
+import fs from 'fs';
 import rateLimit from 'express-rate-limit';
 import { initDb, getDb } from './db.js';
 import { authenticate } from './middleware/auth.js';
@@ -137,6 +139,17 @@ app.use('/api/ai', authenticate, requireActiveSubscription, aiRouter);
 app.use('/api/corporate', authenticate, requireActiveSubscription, corporateRouter);
 app.use('/api/franchise', authenticate, requireActiveSubscription, franchiseRouter);
 app.use('/api/channels', authenticate, requireActiveSubscription, channelsRouter);
+
+// Serve the built frontend when present (production/single-service deploys). In local dev,
+// client/dist doesn't exist — the client runs on its own Vite dev server instead, proxying
+// /api to this server, so this block is a no-op there.
+const clientDistPath = path.join(import.meta.dirname, '..', '..', 'client', 'dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
 
 app.use(errorHandler);
 
