@@ -5,6 +5,7 @@ import path from 'path';
 import { getDb } from '../db.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { uploadRoomPhoto, deleteRoomPhoto, extractRoomPhotoFilename } from '../storage.js';
+import { getPlanLimits } from './subscriptions.js';
 
 export const roomsRouter = Router();
 const db = getDb();
@@ -167,6 +168,12 @@ roomsRouter.post('/', async (req: AuthRequest, res: Response) => {
   }
   const typeExists = await db.queryOne('SELECT id FROM room_types WHERE id = ? AND hotel_id = ?', [room_type_id, req.user!.hotel_id]);
   if (!typeExists) return res.status(400).json({ error: 'Room type not found' });
+
+  const { maxRooms } = await getPlanLimits(req.user!.hotel_id);
+  const { count: roomCount } = (await db.queryOne('SELECT COUNT(*) as count FROM rooms WHERE hotel_id = ?', [req.user!.hotel_id])) || { count: 0 };
+  if (roomCount >= maxRooms) {
+    return res.status(402).json({ error: `Your plan allows up to ${maxRooms} rooms. Upgrade to add more.`, code: 'PLAN_LIMIT_REACHED' });
+  }
 
   const id = uuid();
   await db.execute(

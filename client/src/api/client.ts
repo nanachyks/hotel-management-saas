@@ -19,6 +19,14 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     throw new Error('Session expired');
   }
 
+  if (res.status === 402) {
+    const err = await res.json().catch(() => ({ error: 'Subscription required' }));
+    if (window.location.pathname !== '/subscriptions') {
+      window.location.href = '/subscriptions';
+    }
+    throw new Error(err.error || 'Subscription required');
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || 'Request failed');

@@ -46,6 +46,7 @@ import enterpriseRouter from './routes/enterprise.js';
 import { channelsRouter } from './routes/channels.js';
 import { publicRouter } from './routes/public.js';
 import { authenticateApiKey } from './middleware/apiKeyAuth.js';
+import { requireActiveSubscription } from './middleware/subscriptionGate.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -88,44 +89,48 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Account/admin/config routes stay reachable even with a lapsed subscription, so a hotel can
+// always manage its account, staff, and billing well enough to renew.
 app.use('/api/auth', authRouter);
-app.use('/api/room-types', authenticate, roomTypesRouter);
-app.use('/api/rooms', authenticate, roomsRouter);
-app.use('/api/guests', authenticate, guestsRouter);
-app.use('/api/bookings', authenticate, bookingsRouter);
-app.use('/api/services', authenticate, servicesRouter);
-app.use('/api/invoices', authenticate, invoicesRouter);
-app.use('/api/dashboard', authenticate, dashboardRouter);
 app.use('/api/users', usersRouter);
-app.use('/api/export', authenticate, exportRouter);
-app.use('/api/email-config', authenticate, emailConfigRouter);
 app.use('/api/hotels', hotelsRouter);
-app.use('/api/expenses', authenticate, expensesRouter);
-app.use('/api/reports', authenticate, reportsRouter);
-app.use('/api/departments', authenticate, departmentsRouter);
-app.use('/api/employees', authenticate, employeesRouter);
-app.use('/api/shifts', authenticate, shiftsRouter);
-app.use('/api/attendance', authenticate, attendanceRouter);
-app.use('/api/housekeeping', authenticate, housekeepingRouter);
-app.use('/api/maintenance', authenticate, maintenanceRouter);
-app.use('/api/room-service', authenticate, roomServiceRouter);
-app.use('/api/deposits', authenticate, depositsRouter);
-app.use('/api/notifications', authenticate, notificationsRouter);
+app.use('/api/email-config', authenticate, emailConfigRouter);
 app.use('/api/subscriptions', authenticate, subscriptionsRouter);
-app.use('/api/taxes', authenticate, taxesRouter);
-app.use('/api/inventory', authenticate, inventoryRouter);
 app.use('/api/currencies', currenciesRouter);
-app.use('/api/payroll', authenticate, payrollRouter);
-app.use('/api/integrations', authenticate, integrationsRouter);
-app.use('/api/ai', authenticate, aiRouter);
-app.use('/api/corporate', authenticate, corporateRouter);
-app.use('/api/franchise', authenticate, franchiseRouter);
-app.use('/api/roles', authenticate, rolesRouter);
 app.use('/api/api-keys', authenticate, apiKeysRouter);
 app.use('/api/white-label', authenticate, whiteLabelRouter);
 app.use('/api/enterprise', authenticate, enterpriseRouter);
-app.use('/api/channels', authenticate, channelsRouter);
+app.use('/api/roles', authenticate, rolesRouter);
 app.use('/api/public', authenticateApiKey, publicRouter);
+
+// Core operational routes require an active (non-expired, non-cancelled) subscription.
+app.use('/api/room-types', authenticate, requireActiveSubscription, roomTypesRouter);
+app.use('/api/rooms', authenticate, requireActiveSubscription, roomsRouter);
+app.use('/api/guests', authenticate, requireActiveSubscription, guestsRouter);
+app.use('/api/bookings', authenticate, requireActiveSubscription, bookingsRouter);
+app.use('/api/services', authenticate, requireActiveSubscription, servicesRouter);
+app.use('/api/invoices', authenticate, requireActiveSubscription, invoicesRouter);
+app.use('/api/dashboard', authenticate, requireActiveSubscription, dashboardRouter);
+app.use('/api/export', authenticate, requireActiveSubscription, exportRouter);
+app.use('/api/expenses', authenticate, requireActiveSubscription, expensesRouter);
+app.use('/api/reports', authenticate, requireActiveSubscription, reportsRouter);
+app.use('/api/departments', authenticate, requireActiveSubscription, departmentsRouter);
+app.use('/api/employees', authenticate, requireActiveSubscription, employeesRouter);
+app.use('/api/shifts', authenticate, requireActiveSubscription, shiftsRouter);
+app.use('/api/attendance', authenticate, requireActiveSubscription, attendanceRouter);
+app.use('/api/housekeeping', authenticate, requireActiveSubscription, housekeepingRouter);
+app.use('/api/maintenance', authenticate, requireActiveSubscription, maintenanceRouter);
+app.use('/api/room-service', authenticate, requireActiveSubscription, roomServiceRouter);
+app.use('/api/deposits', authenticate, requireActiveSubscription, depositsRouter);
+app.use('/api/notifications', authenticate, requireActiveSubscription, notificationsRouter);
+app.use('/api/taxes', authenticate, requireActiveSubscription, taxesRouter);
+app.use('/api/inventory', authenticate, requireActiveSubscription, inventoryRouter);
+app.use('/api/payroll', authenticate, requireActiveSubscription, payrollRouter);
+app.use('/api/integrations', authenticate, requireActiveSubscription, integrationsRouter);
+app.use('/api/ai', authenticate, requireActiveSubscription, aiRouter);
+app.use('/api/corporate', authenticate, requireActiveSubscription, corporateRouter);
+app.use('/api/franchise', authenticate, requireActiveSubscription, franchiseRouter);
+app.use('/api/channels', authenticate, requireActiveSubscription, channelsRouter);
 
 app.use(errorHandler);
 

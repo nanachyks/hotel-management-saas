@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { getDb } from '../db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { sendEmailVerification } from '../services/email.js';
+import { getPlanLimits } from './subscriptions.js';
 
 export const hotelsRouter = Router();
 const db = getDb();
@@ -67,6 +68,15 @@ hotelsRouter.post('/invitations', async (req: AuthRequest, res: Response) => {
     [email, req.user!.hotel_id]
   );
   if (existing) return res.status(409).json({ error: 'User already belongs to this hotel' });
+
+  const { maxUsers } = await getPlanLimits(req.user!.hotel_id);
+  const { count: userCount } = (await db.queryOne('SELECT COUNT(*) as count FROM users WHERE hotel_id = ?', [req.user!.hotel_id])) || { count: 0 };
+  const { count: pendingInvites } = (await db.queryOne(
+    "SELECT COUNT(*) as count FROM hotel_invitations WHERE hotel_id = ? AND expires_at > NOW()", [req.user!.hotel_id]
+  )) || { count: 0 };
+  if (userCount + pendingInvites >= maxUsers) {
+    return res.status(402).json({ error: `Your plan allows up to ${maxUsers} users. Upgrade to invite more.`, code: 'PLAN_LIMIT_REACHED' });
+  }
 
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

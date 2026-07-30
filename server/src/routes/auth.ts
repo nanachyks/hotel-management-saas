@@ -157,6 +157,17 @@ authRouter.post('/register', async (req: Request, res: Response) => {
     [uuid(), id, email, verificationToken, expiresAt]
   );
 
+  const freePlan = await db.queryOne("SELECT id FROM subscription_plans WHERE slug = 'free_trial' ORDER BY sort_order ASC LIMIT 1");
+  if (freePlan) {
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+    await db.execute(
+      `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, trial_ends_at, current_period_starts_at, current_period_ends_at)
+       VALUES (?, ?, ?, 'monthly', 'trial', ?, NOW(), ?)`,
+      [uuid(), hotelId, freePlan.id, trialEndsAt.toISOString().split('T')[0], trialEndsAt.toISOString().split('T')[0]]
+    );
+  }
+
   sendEmailVerification(email, { name, token: verificationToken });
 
   res.status(201).json({ message: 'Account created. Please check your email to verify your account.' });

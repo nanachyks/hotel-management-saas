@@ -339,3 +339,18 @@ export async function getPlanLimits(hotelId: string): Promise<{ maxRooms: number
   `, [hotelId]);
   return sub ? { maxRooms: sub.max_rooms, maxUsers: sub.max_users } : { maxRooms: 9999, maxUsers: 9999 };
 }
+
+// No subscription row is treated as unrestricted — this only happens for hotels that predate
+// per-hotel subscription tracking, since new signups always get a trial row (see auth.ts register).
+export async function getSubscriptionGateStatus(hotelId: string): Promise<{ active: boolean; reason?: string }> {
+  const sub = await db.queryOne(
+    'SELECT status, current_period_ends_at FROM hotel_subscriptions WHERE hotel_id = ?',
+    [hotelId]
+  );
+  if (!sub) return { active: true };
+  if (sub.status === 'cancelled') return { active: false, reason: 'Your subscription has been cancelled.' };
+  if (sub.current_period_ends_at && new Date(sub.current_period_ends_at) < new Date()) {
+    return { active: false, reason: 'Your subscription period has ended. Please renew to continue.' };
+  }
+  return { active: true };
+}
