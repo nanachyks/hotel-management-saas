@@ -31,6 +31,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [displayCurrency, setDisplayCurrencyState] = useState(() => localStorage.getItem('displayCurrency') || 'GHS');
 
   useEffect(() => {
+    if (!localStorage.getItem('token')) return;
     api.get<Currency[]>('/currencies').then(setCurrencies).catch(() => {});
     api.get<ExchangeRate[]>('/currencies/rates').then(data => {
       const map: Record<string, number> = {};
