@@ -1,0 +1,118 @@
+.hotelease-booking-widget {
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: inherit;
+}
+
+.hotelease-room-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.hotelease-room-type-card {
+  display: block;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hotelease-room-type-card:has(input:checked) {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.hotelease-room-type-card input[type="radio"] {
+  margin-right: 8px;
+}
+
+.hotelease-room-type-body h3 {
+  margin: 4px 0 6px;
+  font-size: 16px;
+}
+
+.hotelease-room-type-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 10px;
+}
+
+.hotelease-room-type-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.hotelease-booking-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hotelease-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.hotelease-form-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.hotelease-form-row input {
+  font-weight: 400;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.hotelease-submit {
+  align-self: flex-start;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #3b82f6;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hotelease-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hotelease-form-message {
+  font-size: 14px;
+}
+
+.hotelease-form-message.hotelease-success {
+  color: #16a34a;
+}
+
+.hotelease-form-message.hotelease-error {
+  color: #dc2626;
+}
+
+.hotelease-notice {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  font-size: 14px;
+}
+
+.hotelease-notice-error {
+  background: #fef2f2;
+  color: #b91c1c;
+}

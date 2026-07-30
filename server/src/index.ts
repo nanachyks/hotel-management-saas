@@ -43,6 +43,8 @@ import apiKeysRouter from './routes/apiKeys.js';
 import whiteLabelRouter from './routes/whiteLabel.js';
 import enterpriseRouter from './routes/enterprise.js';
 import { channelsRouter } from './routes/channels.js';
+import { publicRouter } from './routes/public.js';
+import { authenticateApiKey } from './middleware/apiKeyAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -110,6 +112,7 @@ app.use('/api/api-keys', authenticate, apiKeysRouter);
 app.use('/api/white-label', authenticate, whiteLabelRouter);
 app.use('/api/enterprise', authenticate, enterpriseRouter);
 app.use('/api/channels', authenticate, channelsRouter);
+app.use('/api/public', authenticateApiKey, publicRouter);
 
 app.use(errorHandler);
 
