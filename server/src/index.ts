@@ -2,9 +2,10 @@ import 'dotenv/config';
 import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
+import helmet from 'helmet';
+import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import { initDb } from './db.js';
+import { initDb, getDb } from './db.js';
 import { authenticate } from './middleware/auth.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
@@ -58,13 +59,25 @@ if (process.env.TRUST_PROXY) {
   app.set('trust proxy', Number.isNaN(trustProxy) ? process.env.TRUST_PROXY : trustProxy);
 }
 
+app.use(helmet());
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
 const corsOrigins = process.env.CORS_ORIGINS || 'http://localhost:5173';
 app.use(cors({
   origin: corsOrigins.split(',').map(s => s.trim()),
   credentials: true,
 }));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(import.meta.dirname, '..', 'uploads')));
+
+// Unauthenticated, unrate-limited so load balancers/orchestrators can probe liveness freely.
+app.get('/health', async (_req, res) => {
+  try {
+    await getDb().queryOne('SELECT 1');
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'error', error: 'Database unavailable' });
+  }
+});
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

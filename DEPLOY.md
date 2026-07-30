@@ -29,6 +29,8 @@ Edit `server/.env` with your values:
 | `NEXT_PUBLIC_APP_URL` | No | Your app URL (for Paystack callback) |
 | `CORS_ORIGINS` | No | Comma-separated allowed origins (default: `http://localhost:5173`) |
 | `PORT` | No | Server port (default: `3001`) |
+| `SUPABASE_URL` | For room photos | Supabase project URL (Settings → API), used for room-photo storage |
+| `SUPABASE_SERVICE_ROLE_KEY` | For room photos | Supabase service-role secret key (Settings → API) — keep this secret, it bypasses RLS |
 
 ---
 
@@ -126,6 +128,18 @@ server {
 
 ---
 
+## 5a. Room-Photo Storage (Supabase Storage)
+
+One-time setup, on the Supabase project you're using (can be the same one as `DATABASE_URL` or a separate one):
+
+1. In the Supabase dashboard, go to **Storage → New bucket**.
+2. Name it exactly `room-photos`, and toggle **Public bucket** on (room photos are meant to be publicly viewable, like on a hotel's public booking page).
+3. Go to **Settings → API** and copy the **Project URL** into `SUPABASE_URL`, and the **service_role** secret key into `SUPABASE_SERVICE_ROLE_KEY`.
+
+The service-role key bypasses Row Level Security — never expose it to the frontend or commit it to version control.
+
+---
+
 ## 5. Database
 
 The app uses Postgres (e.g. a Supabase project), connected via the `pg` driver. Set `DATABASE_URL` in `server/.env` to your connection string — for Supabase, use the pooled ("Transaction" mode) connection string from Project Settings → Database.
@@ -140,7 +154,7 @@ cd server && npm run migrate
 
 **Backup:** Use your Postgres provider's built-in backups (e.g. Supabase's automatic daily backups and point-in-time recovery), rather than file-based backup.
 
-**Seed data:** Run `npm run seed` to populate sample data (rooms, bookings, users).
+**Seed data:** Run `npm run seed` to populate sample data (rooms, bookings, users). This is demo/dev data only — `seed.ts` refuses to run when `NODE_ENV=production` unless you explicitly pass `ALLOW_SEED_IN_PRODUCTION=true`, since it inserts accounts with the well-known passwords below.
 
 **Default demo credentials after seeding:**
 
@@ -152,6 +166,8 @@ cd server && npm run migrate
 | `receptionist` | `reception123` | Receptionist |
 | `housekeeping` | `housekeep123` | Housekeeping |
 | `accountant` | `account123` | Accountant |
+
+**Before accepting real traffic:** change or delete these seeded accounts. They're only meant for local development/demos, not production tenants.
 
 ---
 
@@ -172,10 +188,12 @@ certbot --nginx -d yourdomain.com
 
 ## 7. Monitoring & Logs
 
+- **Health check:** `GET /health` pings the database and returns `{ status: 'ok' }` (200) or `{ status: 'error' }` (503). Unauthenticated and not rate-limited — point your load balancer/orchestrator's liveness probe at it.
+- **Request logs:** HTTP requests are logged via `morgan` (`combined` format in production, `dev` format otherwise) to stdout.
+- **Error logs:** Unhandled errors are written to `server/server.log` in addition to stdout (see `middleware/errorHandler.ts`). There's no rotation on that file — add one (e.g. `logrotate`) or replace it with a structured logger (`winston`/`pino`) if volume grows.
 - **PM2 logs:** `pm2 logs hotel-server`
 - **Docker logs:** `docker-compose logs -f`
 - The server logs all emails to console when `RESEND_API_KEY` is not set
-- There is no built-in logging to disk — add via `winston` or similar if needed
 
 ---
 
@@ -194,7 +212,7 @@ pm2 restart hotel-server   # or docker-compose restart
 
 - **Auth:** Stateless JWT. Tokens expire after 24h. Refresh tokens stored in DB.
 - **Database:** Postgres via `pg`, connected over `DATABASE_URL`. Suitable for multi-replica deployment — all app servers share the same database, no local file/volume dependency.
-- **File uploads:** Stored in `server/uploads/`. Serve via `/uploads` static route.
+- **File uploads:** Room photos are stored in Supabase Storage (bucket `room-photos`), not on local disk — this keeps them intact across redeploys and multiple replicas on platforms with ephemeral filesystems (Railway/Render/Fly). Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; see step 5b below for one-time bucket setup.
 - **Emails:** Resend API. Falls back to `console.log` if not configured.
 - **Payments:** Paystack. Must configure both public and secret keys.
 - **White-label:** Brand color stored in DB, applied via CSS custom properties at runtime.

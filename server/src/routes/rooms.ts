@@ -2,25 +2,15 @@ import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { getDb } from '../db.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { uploadRoomPhoto, deleteRoomPhoto, extractRoomPhotoFilename } from '../storage.js';
 
 export const roomsRouter = Router();
 const db = getDb();
 
-const uploadsDir = path.join(import.meta.dirname, '..', '..', 'uploads', 'rooms');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `${uuid()}${ext}`);
-  },
-});
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -220,12 +210,15 @@ roomsRouter.post('/:id/photo', upload.single('photo'), async (req: AuthRequest, 
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   if (existing.photo) {
-    const oldPath = path.join(uploadsDir, existing.photo);
-    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    await deleteRoomPhoto(extractRoomPhotoFilename(existing.photo));
   }
 
-  await db.execute("UPDATE rooms SET photo = ?, updated_at = NOW() WHERE id = ?", [req.file.filename, req.params.id]);
-  res.json({ photo: req.file.filename });
+  const ext = path.extname(req.file.originalname) || '.jpg';
+  const filename = `${uuid()}${ext}`;
+  const photoUrl = await uploadRoomPhoto(filename, req.file.buffer, req.file.mimetype);
+
+  await db.execute("UPDATE rooms SET photo = ?, updated_at = NOW() WHERE id = ?", [photoUrl, req.params.id]);
+  res.json({ photo: photoUrl });
 });
 
 roomsRouter.delete('/:id/photo', async (req: AuthRequest, res: Response) => {
@@ -233,8 +226,7 @@ roomsRouter.delete('/:id/photo', async (req: AuthRequest, res: Response) => {
   if (!existing) return res.status(404).json({ error: 'Room not found' });
   if (!existing.photo) return res.status(404).json({ error: 'No photo to delete' });
 
-  const filePath = path.join(uploadsDir, existing.photo);
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  await deleteRoomPhoto(extractRoomPhotoFilename(existing.photo));
   await db.execute("UPDATE rooms SET photo = NULL, updated_at = NOW() WHERE id = ?", [req.params.id]);
   res.json({ message: 'Photo deleted' });
 });
@@ -243,8 +235,7 @@ roomsRouter.delete('/:id', async (req: AuthRequest, res: Response) => {
   const existing = await db.queryOne('SELECT * FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Room not found' });
   if (existing.photo) {
-    const filePath = path.join(uploadsDir, existing.photo);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    await deleteRoomPhoto(extractRoomPhotoFilename(existing.photo));
   }
   await db.execute('DELETE FROM rooms WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   res.json({ message: 'Room deleted' });

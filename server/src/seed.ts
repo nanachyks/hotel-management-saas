@@ -3,6 +3,15 @@ import bcrypt from 'bcryptjs';
 import { initDb, getDb } from './db.js';
 
 async function seed() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED_IN_PRODUCTION !== 'true') {
+    console.error(
+      'Refusing to seed: NODE_ENV=production. This inserts a demo hotel with well-known ' +
+      'admin/owner passwords (admin123/owner123). Set ALLOW_SEED_IN_PRODUCTION=true if you ' +
+      'really want demo data on this database.'
+    );
+    process.exit(1);
+  }
+
   await initDb();
   const db = getDb();
 

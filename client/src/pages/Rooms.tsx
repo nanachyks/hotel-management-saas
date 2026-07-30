@@ -228,7 +228,7 @@ export default function Rooms() {
                           <div style={{ width: 60, height: 40, background: 'rgba(255,255,255,0.05)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: colors.slate }}>Uploading...</div>
                         ) : (
                           <>
-                            <img src={`/uploads/rooms/${r.photo}`} alt="" style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 4 }} />
+                            <img src={r.photo} alt="" style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 4 }} />
                             <button onClick={() => setConfirmPhotoDelete(r.id)} style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', border: 'none', background: colors.danger, color: '#fff', fontSize: 10, lineHeight: '16px', textAlign: 'center', cursor: 'pointer', padding: 0 }}>&times;</button>
                           </>
                         )}
