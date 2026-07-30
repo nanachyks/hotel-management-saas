@@ -198,7 +198,7 @@ bookingsRouter.post('/', validate(createBookingSchema), async (req: AuthRequest,
 
   const overlapping = await db.queryOne(`
     SELECT COUNT(*) as count FROM bookings
-    WHERE room_id = ? AND status IN ('confirmed', 'checked_in')
+    WHERE room_id = ? AND status IN ('confirmed', 'checked_in', 'pending')
     AND check_in_date < ? AND check_out_date > ?
   `, [room_id, check_out_date, check_in_date]);
   if ((overlapping?.count || 0) > 0) return res.status(400).json({ error: 'Room is already booked for these dates' });

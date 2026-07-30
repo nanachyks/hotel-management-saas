@@ -85,7 +85,7 @@ roomsRouter.get('/availability', async (req: AuthRequest, res: Response) => {
     JOIN guests g ON b.guest_id = g.id
     JOIN rooms r ON b.room_id = r.id
     WHERE r.hotel_id = ?
-    AND b.status IN ('confirmed', 'checked_in')
+    AND b.status IN ('confirmed', 'checked_in', 'pending')
     AND b.check_in_date < ?
     AND b.check_out_date > ?
   `, [req.user!.hotel_id, to as string, from as string]);
@@ -124,7 +124,7 @@ roomsRouter.get('/check-availability', async (req: AuthRequest, res: Response) =
 
   const overlapping = await db.queryOne(`
     SELECT COUNT(*) as count FROM bookings
-    WHERE room_id = ? AND status IN ('confirmed', 'checked_in')
+    WHERE room_id = ? AND status IN ('confirmed', 'checked_in', 'pending')
     AND check_in_date < ? AND check_out_date > ?
   `, [room_id as string, check_out as string, check_in as string]);
 

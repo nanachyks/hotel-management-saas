@@ -75,6 +75,31 @@ export async function verifyTransaction(reference: string): Promise<VerifyTransa
   };
 }
 
+export interface RefundResult {
+  status: string; // e.g. 'pending', 'processed', 'processing'
+  amount: number;
+  currency: string;
+  transaction_reference: string;
+}
+
+// amount is optional and in the same minor-unit convention as initializeTransaction
+// (pesewas) — omit for a full refund of the original transaction.
+export async function refundTransaction(reference: string, amount?: number): Promise<RefundResult> {
+  const res = await request('POST', '/refund', {
+    transaction: reference,
+    ...(amount ? { amount } : {}),
+  });
+  if (!res.status || !res.data) {
+    throw new Error(res.message || 'Paystack refund failed');
+  }
+  return {
+    status: res.data.status,
+    amount: res.data.amount,
+    currency: res.data.currency,
+    transaction_reference: res.data.transaction_reference,
+  };
+}
+
 export function isConfigured(): boolean {
   return PAYSTACK_SECRET.length > 0 && PAYSTACK_SECRET !== 'sk_test_your_key_here';
 }

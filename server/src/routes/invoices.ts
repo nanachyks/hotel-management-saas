@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit';
 import { getDb } from '../db.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { createNotification } from './notifications.js';
+import { refundTransaction, isConfigured } from '../services/paystack.js';
 
 export const invoicesRouter = Router();
 const db = getDb();
@@ -101,7 +102,9 @@ invoicesRouter.post('/:id/pay', async (req: AuthRequest, res: Response) => {
   res.status(201).json(payment);
 });
 
-// Refund (full or partial)
+// Refund (full or partial). If the invoice was paid online (Paystack), the money actually has
+// to be sent back through Paystack's /refund endpoint before this is recorded locally —
+// otherwise the books would say "refunded" while the guest never got their money back.
 invoicesRouter.post('/:id/refund', async (req: AuthRequest, res: Response) => {
   const { amount } = req.body;
   const hotelId = req.user?.hotel_id;
@@ -110,13 +113,34 @@ invoicesRouter.post('/:id/refund', async (req: AuthRequest, res: Response) => {
   if (invoice.paid_amount <= 0) return res.status(400).json({ error: 'No payments to refund' });
 
   const refundAmount = amount || invoice.paid_amount;
+
+  const onlinePayment = await db.queryOne(
+    "SELECT * FROM payments WHERE invoice_id = ? AND method = 'online' AND amount > 0 ORDER BY created_at DESC LIMIT 1",
+    [req.params.id]
+  );
+
+  let refundReference = 'REFUND';
+  let refundMethod = 'cash';
+  if (onlinePayment) {
+    if (!isConfigured()) {
+      return res.status(500).json({ error: 'Payment gateway not configured. Set PAYSTACK_SECRET_KEY in server/.env' });
+    }
+    try {
+      await refundTransaction(onlinePayment.reference, Math.round(refundAmount * 100));
+      refundReference = onlinePayment.reference;
+      refundMethod = 'online';
+    } catch (err: any) {
+      return res.status(502).json({ error: err.message || 'Paystack refund failed' });
+    }
+  }
+
   const newPaid = Math.max(0, invoice.paid_amount - refundAmount);
   const newStatus = newPaid <= 0 ? 'refunded' : 'partial';
 
   const paymentId = uuid();
   await db.execute(
     'INSERT INTO payments (id, invoice_id, amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?)',
-    [paymentId, req.params.id, -refundAmount, 'cash', 'REFUND', 'Refund processed']
+    [paymentId, req.params.id, -refundAmount, refundMethod, refundReference, 'Refund processed']
   );
 
   await db.execute('UPDATE invoices SET paid_amount = ?, status = ? WHERE id = ? AND hotel_id = ?', [newPaid, newStatus, req.params.id, String(hotelId)]);

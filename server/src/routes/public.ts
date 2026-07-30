@@ -48,7 +48,7 @@ publicRouter.get('/availability', requireApiPermission('read'), async (req: ApiK
     WHERE r.hotel_id = ? AND r.status != 'maintenance'
     AND NOT EXISTS (
       SELECT 1 FROM bookings b
-      WHERE b.room_id = r.id AND b.status IN ('confirmed', 'checked_in')
+      WHERE b.room_id = r.id AND b.status IN ('confirmed', 'checked_in', 'pending')
       AND b.check_in_date < ? AND b.check_out_date > ?
     )
   `;
@@ -81,8 +81,10 @@ const publicBookingSchema = z.object({
 
 // Create a pending booking from an external channel (e.g. the WordPress plugin) and start
 // a Paystack transaction for it. The booking is only confirmed once the guest actually pays
-// (see confirmBookingPayment, invoked from the Paystack webhook) — a pending booking does not
-// hold the room, matching the existing availability predicate below.
+// (see confirmBookingPayment, invoked from the Paystack webhook). A pending booking still
+// holds the room — see the no_overlapping_bookings exclusion constraint — for pending_expires_at
+// (set below), after which the sweeper (jobs/expirePendingBookings.ts) cancels it and frees
+// the room for someone else.
 publicRouter.post('/bookings', requireApiPermission('write'), validate(publicBookingSchema), async (req: ApiKeyRequest, res: Response) => {
   const hotelId = req.apiKeyAuth!.hotelId;
   const { room_type_id, check_in_date, check_out_date, guest, callback_url } = req.body;
@@ -103,7 +105,7 @@ publicRouter.post('/bookings', requireApiPermission('write'), validate(publicBoo
     WHERE r.hotel_id = ? AND r.room_type_id = ? AND r.status != 'maintenance'
     AND NOT EXISTS (
       SELECT 1 FROM bookings b
-      WHERE b.room_id = r.id AND b.status IN ('confirmed', 'checked_in')
+      WHERE b.room_id = r.id AND b.status IN ('confirmed', 'checked_in', 'pending')
       AND b.check_in_date < ? AND b.check_out_date > ?
     )
     ORDER BY r.room_number ASC LIMIT 1
@@ -128,9 +130,10 @@ publicRouter.post('/bookings', requireApiPermission('write'), validate(publicBoo
   const totalAmount = nights * roomType.base_price;
 
   const bookingId = uuid();
+  const pendingExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
   await db.execute(
-    'INSERT INTO bookings (id, hotel_id, guest_id, room_id, check_in_date, check_out_date, total_amount, source, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [bookingId, hotelId, guestId, room.id, check_in_date, check_out_date, totalAmount, 'online', 'pending']
+    'INSERT INTO bookings (id, hotel_id, guest_id, room_id, check_in_date, check_out_date, total_amount, source, status, pending_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [bookingId, hotelId, guestId, room.id, check_in_date, check_out_date, totalAmount, 'online', 'pending', pendingExpiresAt.toISOString()]
   );
 
   const dueDate = new Date();
@@ -187,23 +190,16 @@ export async function confirmBookingPayment(payment: any): Promise<void> {
   const booking = await db.queryOne('SELECT * FROM bookings WHERE id = ?', [payment.booking_id]);
   if (!booking) return;
 
+  // The room may have been booked out from under this (already-paid) reservation by another
+  // confirmed booking before this payment cleared. Either way the money has been captured, so
+  // the invoice gets marked paid below regardless — the difference is only whether the booking
+  // itself could also be confirmed.
+  let roomConfirmed = true;
   try {
     await db.execute("UPDATE bookings SET status = 'confirmed', updated_at = NOW() WHERE id = ?", [booking.id]);
   } catch (err: any) {
-    if (err.code === EXCLUSION_VIOLATION) {
-      // The room was booked out from under this (already-paid) reservation by another
-      // confirmed booking before this payment cleared. Leave the booking pending and flag it
-      // for staff to manually resolve (reassign a room or refund the guest) rather than
-      // silently losing track of captured money.
-      await db.execute("UPDATE booking_payments SET status = 'success', paid_at = NOW() WHERE id = ?", [payment.id]);
-      await createNotification(
-        booking.hotel_id, 'booking', 'Booking conflict needs attention',
-        `Payment succeeded for a booking on a room that was taken by another confirmed booking in the meantime. Please contact the guest to reassign or refund.`,
-        `/bookings/${booking.id}`
-      );
-      return;
-    }
-    throw err;
+    if (err.code !== EXCLUSION_VIOLATION) throw err;
+    roomConfirmed = false;
   }
 
   const invoice = await db.queryOne('SELECT * FROM invoices WHERE booking_id = ?', [booking.id]);
@@ -216,6 +212,15 @@ export async function confirmBookingPayment(payment: any): Promise<void> {
   }
 
   await db.execute("UPDATE booking_payments SET status = 'success', paid_at = NOW() WHERE id = ?", [payment.id]);
+
+  if (!roomConfirmed) {
+    await createNotification(
+      booking.hotel_id, 'booking', 'Booking conflict needs attention',
+      `Payment succeeded and was recorded on the invoice, but the room was taken by another confirmed booking in the meantime. Please contact the guest to reassign a room or refund the invoice.`,
+      `/bookings/${booking.id}`
+    );
+    return;
+  }
 
   const guest = await db.queryOne('SELECT * FROM guests WHERE id = ?', [booking.guest_id]);
   const room = await db.queryOne('SELECT * FROM rooms WHERE id = ?', [booking.room_id]);

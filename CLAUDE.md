@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Node.js/Express/TypeScript backend, React 18/Vite/TypeScript frontend, Postgres via `pg` (raw SQL, no ORM). Auth is JWT + bcryptjs. Payments/subscriptions via Paystack. Email via Resend with a graceful no-op fallback when unconfigured. A WordPress plugin (`wordpress-plugin/`) consumes a public API surface for embeddable booking widgets.
 
-> Note: `README.md` currently describes the DB as "SQLite (sql.js)" — that's stale. The real backend is Postgres (`pg` + a hand-rolled migration runner), confirmed by `server/src/db.ts` and `server/migrations/`.
-
 ## Commands
 
 Run from repo root unless noted.
@@ -16,7 +14,7 @@ Run from repo root unless noted.
 npm run install:all      # installs server AND client deps
 npm run dev               # server (:3001) + client concurrently
 npm run dev:server        # server only, tsx watch
-npm run dev:client        # client only, vite dev server on :3000 (see client/vite.config.ts; README says 5173, that's also stale)
+npm run dev:client        # client only, vite dev server on :3000 (see client/vite.config.ts)
 npm run seed               # cd server && tsx src/seed.ts — demo data
 npm run build              # tsc build for both server and client
 npm test                   # server tests then client tests
@@ -51,7 +49,13 @@ Required env for the server to boot: `DATABASE_URL`, `JWT_SECRET` (server refuse
 - `/api/public/*` uses a separate auth scheme, `authenticateApiKey` (`middleware/apiKeyAuth.ts`), keyed off the `api_keys` table (`X-API-Key` / `X-API-Secret` headers, per-key permissions and IP whitelist) — this is what the WordPress plugin and other external integrations call.
 - `/api/subscriptions/paystack-webhook` is intentionally mounted with no `authenticate` — Paystack calls it server-to-server and it's verified instead via HMAC-SHA512 over the raw request body (`services/paystack.ts#verifyWebhookSignature`), which is why `index.ts` captures `req.rawBody` in the `express.json()` verify hook.
 
-**Payments.** `services/paystack.ts` wraps Paystack's HTTP API (initialize/verify transaction, webhook signature check). `routes/subscriptions.ts` is the reference implementation of the full flow: initialize a transaction with `metadata`, store a `pending` row (`subscription_payments`), and confirm via either the browser-redirect `verify-payment` endpoint or the webhook — both paths converge on the same `activateSubscriptionForPayment()` function to avoid double-processing. The guest-facing booking flow (`routes/public.ts`) does not yet follow this pattern (see below).
+**Payments.** `services/paystack.ts` wraps Paystack's HTTP API (initialize/verify/refund transaction, webhook signature check). Two flows share this service and the same shape — initialize a transaction with `metadata`, store a `pending` payment row, confirm via the webhook (`routes/paystackWebhook.ts` branches on `metadata.type === 'booking'`/`metadata.booking_id` vs `metadata.plan_id`):
+- Subscriptions: `routes/subscriptions.ts`, `subscription_payments` table, confirmed by `activateSubscriptionForPayment()` (also reachable via the browser-redirect `verify-payment` endpoint).
+- Guest bookings: `routes/public.ts`, `booking_payments` table, confirmed by `confirmBookingPayment()`. A booking is created `pending` and only flips to `confirmed` once payment clears — see "Booking holds" below.
+
+Refunds (`routes/invoices.ts` `POST /:id/refund`) call `refundTransaction()` when the invoice's original payment has `method = 'online'`, using the stored Paystack reference. The local refund is only recorded if that call succeeds — never mark something refunded before the gateway confirms it.
+
+**Booking holds & the overlap constraint.** `bookings` has a Postgres exclusion constraint (`no_overlapping_bookings`, `migrations/0004` + `0006`) that rejects any INSERT/UPDATE overlapping another `confirmed`/`checked_in`/`pending` booking for the same room — this is the actual source of truth for double-booking prevention, not the app-level `NOT EXISTS` checks in `public.ts`/`bookings.ts`/`rooms.ts` (those still run first, purely to give a friendlier error than a raw constraint violation). Because `pending` counts, an unpaid public booking holds the room; `pending_expires_at` (set only on public bookings, 15 minutes out) bounds that hold, and `jobs/expirePendingBookings.ts` — an in-process `setInterval` sweeper started from `index.ts`, no external cron — cancels stale ones every minute to free the room. Staff-created `pending` bookings have no expiry and hold the room indefinitely until confirmed/cancelled. Any code that inserts/updates a booking's status or dates should catch Postgres error code `23P01` (exclusion violation) rather than letting it surface as a raw 500.
 
 **Testing.** Server tests (`server/src/__tests__/`) spin up an isolated Express app (`test-app.ts`, a slimmer route mount than production `index.ts` — new routers may need adding there too) against a real Postgres test DB (`TEST_DATABASE_URL`), not a mock. `setup.ts` truncates every table after each test and exposes `seedTestData()` for a standard hotel/users/rooms/guest fixture. Client tests use Testing Library + jsdom via vitest.
 
@@ -61,7 +65,5 @@ Required env for the server to boot: `DATABASE_URL`, `JWT_SECRET` (server refuse
 
 ## Known gaps (in progress / tracked, not yet fixed)
 
-- `routes/public.ts` guest bookings are created as `status: 'confirmed'` with no Paystack charge — payment collection isn't wired up yet for the public booking flow (unlike the subscription flow in `routes/subscriptions.ts`).
-- The availability check and booking insert in `routes/public.ts` aren't atomic (no transaction / row lock / exclusion constraint), so concurrent requests can double-book a room.
-- `api_keys.secret` is stored in plaintext and compared directly (timing-safe, but not hashed).
-- `routes/channels.ts` `/sync` is a stub — it returns local room availability but never actually calls an OTA.
+- `routes/channels.ts` `/sync` is a stub — it returns local room availability but never actually calls an OTA. Deferred until after launch.
+- A very late Paystack webhook (payment succeeds after the booking's `pending_expires_at` hold was swept and the room resold) leaves the invoice marked `paid` with the booking still `cancelled` — money captured but no room to show for it. `confirmBookingPayment()`'s exclusion-violation branch flags this with a staff notification for manual reassignment/refund rather than resolving it automatically.

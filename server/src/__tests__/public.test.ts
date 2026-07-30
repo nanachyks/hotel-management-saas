@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import crypto from 'crypto';
+import { v4 as uuid } from 'uuid';
 import { createApp } from './test-app.js';
 import { seedTestData } from './setup.js';
 import { getDb } from '../db.js';
+import { expireStalePendingBookings } from '../jobs/expirePendingBookings.js';
 
 const app = createApp();
 let token: string;
@@ -77,6 +79,7 @@ describe('Public booking payments', () => {
     const db = getDb();
     const booking = await db.queryOne('SELECT * FROM bookings WHERE id = ?', [res.body.booking_id]);
     expect(booking.status).toBe('pending');
+    expect(booking.pending_expires_at).not.toBeNull();
     const payment = await db.queryOne('SELECT * FROM booking_payments WHERE booking_id = ?', [res.body.booking_id]);
     expect(payment.status).toBe('pending');
   });
@@ -109,42 +112,100 @@ describe('Public booking payments', () => {
     expect(bookingPayment.status).toBe('success');
   });
 
-  it('leaves the losing booking pending (flagged, not lost) when two paid bookings collide on the same room', async () => {
-    // room_types.rt1Id has exactly one seeded room, so both bookings below target it.
-    mockPaystackInit('ref_race_a');
+  it('rejects a second booking attempt for the same room before any payment happens', async () => {
+    // Since pending bookings now hold the room too, the second guest is turned away here —
+    // at booking time, before ever reaching Paystack — instead of both paying and only one
+    // winning the room later.
+    mockPaystackInit('ref_hold_a');
     const createA = await createBooking({
-      check_in_date: '2026-10-01',
-      check_out_date: '2026-10-03',
-      guest: { first_name: 'A', last_name: 'One', email: 'a@guest.com', phone: '+1-555-2222' },
+      check_in_date: '2026-12-01',
+      check_out_date: '2026-12-03',
+      guest: { first_name: 'Hold', last_name: 'A', email: 'holda@guest.com', phone: '+1-555-5555' },
     });
     expect(createA.status).toBe(201);
 
-    mockPaystackInit('ref_race_b');
+    mockPaystackInit('ref_hold_b');
     const createB = await createBooking({
-      check_in_date: '2026-10-01',
-      check_out_date: '2026-10-03',
-      guest: { first_name: 'B', last_name: 'Two', email: 'b@guest.com', phone: '+1-555-3333' },
+      check_in_date: '2026-12-01',
+      check_out_date: '2026-12-03',
+      guest: { first_name: 'Hold', last_name: 'B', email: 'holdb@guest.com', phone: '+1-555-6666' },
     });
-    expect(createB.status).toBe(201);
+    expect(createB.status).toBe(400);
+    expect(createB.body.error).toMatch(/no rooms/i);
+  });
 
-    const confirmA = signedWebhookBody('ref_race_a', ids.hotelId, createA.body.booking_id);
-    await request(app).post('/api/subscriptions/paystack-webhook')
-      .set('Content-Type', 'application/json').set('x-paystack-signature', confirmA.signature).send(confirmA.body);
-
-    const confirmB = signedWebhookBody('ref_race_b', ids.hotelId, createB.body.booking_id);
-    const resB = await request(app).post('/api/subscriptions/paystack-webhook')
-      .set('Content-Type', 'application/json').set('x-paystack-signature', confirmB.signature).send(confirmB.body);
-    // The webhook always 200s (so Paystack doesn't endlessly retry), even though the second
-    // booking couldn't be confirmed.
-    expect(resB.status).toBe(200);
+  it('frees the room again once a stale pending booking expires', async () => {
+    mockPaystackInit('ref_expire_a');
+    const createA = await createBooking({
+      check_in_date: '2026-12-10',
+      check_out_date: '2026-12-12',
+      guest: { first_name: 'Expire', last_name: 'A', email: 'expirea@guest.com', phone: '+1-555-7777' },
+    });
+    expect(createA.status).toBe(201);
 
     const db = getDb();
-    const bookingA = await db.queryOne('SELECT * FROM bookings WHERE id = ?', [createA.body.booking_id]);
-    const bookingB = await db.queryOne('SELECT * FROM bookings WHERE id = ?', [createB.body.booking_id]);
-    expect(bookingA.status).toBe('confirmed');
-    expect(bookingB.status).toBe('pending');
+    await db.execute("UPDATE bookings SET pending_expires_at = NOW() - INTERVAL '1 minute' WHERE id = ?", [createA.body.booking_id]);
 
-    const paymentB = await db.queryOne('SELECT * FROM booking_payments WHERE booking_id = ?', [createB.body.booking_id]);
-    expect(paymentB.status).toBe('success');
+    const expiredCount = await expireStalePendingBookings();
+    expect(expiredCount).toBeGreaterThanOrEqual(1);
+
+    const bookingA = await db.queryOne('SELECT * FROM bookings WHERE id = ?', [createA.body.booking_id]);
+    expect(bookingA.status).toBe('cancelled');
+    const paymentA = await db.queryOne('SELECT * FROM booking_payments WHERE booking_id = ?', [createA.body.booking_id]);
+    expect(paymentA.status).toBe('failed');
+
+    mockPaystackInit('ref_expire_b');
+    const createB = await createBooking({
+      check_in_date: '2026-12-10',
+      check_out_date: '2026-12-12',
+      guest: { first_name: 'Expire', last_name: 'B', email: 'expireb@guest.com', phone: '+1-555-8888' },
+    });
+    expect(createB.status).toBe(201);
+  });
+
+  it('records the payment on the invoice even when the room could not be re-confirmed', async () => {
+    // Pending bookings holding the room (above) means two *public* bookings can no longer
+    // collide this way. The remaining edge case is a very late webhook: the hold already
+    // expired and was swept, and the now-free room was resold and confirmed to someone else,
+    // before Paystack's charge.success event for the original guest finally arrives.
+    mockPaystackInit('ref_conflict_1');
+    const create = await createBooking({
+      check_in_date: '2026-11-01',
+      check_out_date: '2026-11-03',
+      guest: { first_name: 'C', last_name: 'Three', email: 'c@guest.com', phone: '+1-555-4444' },
+    });
+    expect(create.status).toBe(201);
+    const bookingId = create.body.booking_id;
+
+    const db = getDb();
+    // The hold expired and was swept, freeing the room...
+    await db.execute("UPDATE bookings SET status = 'cancelled' WHERE id = ?", [bookingId]);
+    // ...which was then booked and confirmed by someone else.
+    await db.execute(
+      'INSERT INTO bookings (id, hotel_id, guest_id, room_id, check_in_date, check_out_date, total_amount, source, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [uuid(), ids.hotelId, ids.guestId, ids.room1Id, '2026-11-01', '2026-11-03', 300, 'walk_in', 'confirmed']
+    );
+
+    // The original guest's payment webhook finally arrives.
+    const { body, signature } = signedWebhookBody('ref_conflict_1', ids.hotelId, bookingId);
+    const webhookRes = await request(app)
+      .post('/api/subscriptions/paystack-webhook')
+      .set('Content-Type', 'application/json')
+      .set('x-paystack-signature', signature)
+      .send(body);
+    expect(webhookRes.status).toBe(200);
+
+    const booking = await db.queryOne('SELECT * FROM bookings WHERE id = ?', [bookingId]);
+    expect(booking.status).toBe('cancelled'); // could not be re-confirmed — the room was gone
+
+    const invoice = await db.queryOne('SELECT * FROM invoices WHERE booking_id = ?', [bookingId]);
+    expect(invoice.status).toBe('paid');
+    expect(invoice.paid_amount).toBe(invoice.amount);
+
+    const payment = await db.queryOne('SELECT * FROM payments WHERE invoice_id = ?', [invoice.id]);
+    expect(payment.method).toBe('online');
+
+    const bookingPayment = await db.queryOne('SELECT * FROM booking_payments WHERE booking_id = ?', [bookingId]);
+    expect(bookingPayment.status).toBe('success');
   });
 });

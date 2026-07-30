@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import rateLimit from 'express-rate-limit';
 import { initDb, getDb } from './db.js';
+import { startPendingBookingSweeper } from './jobs/expirePendingBookings.js';
 import { authenticate } from './middleware/auth.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
@@ -154,6 +155,7 @@ if (fs.existsSync(clientDistPath)) {
 app.use(errorHandler);
 
 initDb().then(() => {
+  startPendingBookingSweeper();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { getDb } from '../db.js';
 import { createApp } from './test-app.js';
@@ -102,6 +102,94 @@ describe('POST /api/invoices/:id/pay', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ amount: 100 });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/invoices/:id/refund', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('refunds a cash-paid invoice locally without calling Paystack', async () => {
+    const bookingId = await createBooking();
+    const db = getDb();
+    const invoice = await db.queryOne('SELECT id, amount FROM invoices WHERE booking_id = ?', [bookingId]);
+    await request(app)
+      .post(`/api/invoices/${invoice.id}/pay`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: invoice.amount, method: 'cash' });
+
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    const res = await request(app)
+      .post(`/api/invoices/${invoice.id}/refund`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(200);
+    expect(res.body.newStatus).toBe('refunded');
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    const updated = await db.queryOne('SELECT status, paid_amount FROM invoices WHERE id = ?', [invoice.id]);
+    expect(updated.status).toBe('refunded');
+    expect(updated.paid_amount).toBe(0);
+  });
+
+  it('refunds an online-paid invoice through Paystack', async () => {
+    const bookingId = await createBooking();
+    const db = getDb();
+    const invoice = await db.queryOne('SELECT id, amount FROM invoices WHERE booking_id = ?', [bookingId]);
+    await db.execute("UPDATE invoices SET paid_amount = ?, status = 'paid' WHERE id = ?", [invoice.amount, invoice.id]);
+    await db.execute(
+      'INSERT INTO payments (id, invoice_id, amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?)',
+      [uuid(), invoice.id, invoice.amount, 'online', 'ref_paystack_123', 'Paystack online payment']
+    );
+
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+      json: async () => ({
+        status: true,
+        message: 'ok',
+        data: { status: 'processed', amount: Math.round(invoice.amount * 100), currency: 'GHS', transaction_reference: 'ref_paystack_123' },
+      }),
+    } as any);
+
+    const res = await request(app)
+      .post(`/api/invoices/${invoice.id}/refund`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/refund');
+
+    const updated = await db.queryOne('SELECT status, paid_amount FROM invoices WHERE id = ?', [invoice.id]);
+    expect(updated.status).toBe('refunded');
+
+    const refundPayment = await db.queryOne('SELECT * FROM payments WHERE invoice_id = ? AND amount < 0', [invoice.id]);
+    expect(refundPayment.method).toBe('online');
+    expect(refundPayment.reference).toBe('ref_paystack_123');
+  });
+
+  it('does not record a refund locally when the Paystack refund call fails', async () => {
+    const bookingId = await createBooking();
+    const db = getDb();
+    const invoice = await db.queryOne('SELECT id, amount FROM invoices WHERE booking_id = ?', [bookingId]);
+    await db.execute("UPDATE invoices SET paid_amount = ?, status = 'paid' WHERE id = ?", [invoice.amount, invoice.id]);
+    await db.execute(
+      'INSERT INTO payments (id, invoice_id, amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?)',
+      [uuid(), invoice.id, invoice.amount, 'online', 'ref_paystack_456', 'Paystack online payment']
+    );
+
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      json: async () => ({ status: false, message: 'Transaction not found' }),
+    } as any);
+
+    const res = await request(app)
+      .post(`/api/invoices/${invoice.id}/refund`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(502);
+
+    const unchanged = await db.queryOne('SELECT status, paid_amount FROM invoices WHERE id = ?', [invoice.id]);
+    expect(unchanged.status).toBe('paid');
+    expect(unchanged.paid_amount).toBe(invoice.amount);
   });
 });
 
