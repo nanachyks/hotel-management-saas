@@ -31,6 +31,7 @@ import { roomServiceRouter } from './routes/roomService.js';
 import { depositsRouter } from './routes/deposits.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
+import { paystackWebhookRouter } from './routes/paystackWebhook.js';
 import { taxesRouter } from './routes/taxes.js';
 import { inventoryRouter } from './routes/inventory.js';
 import { currenciesRouter } from './routes/currencies.js';
@@ -68,7 +69,11 @@ app.use(cors({
   origin: corsOrigins.split(',').map(s => s.trim()),
   credentials: true,
 }));
-app.use(express.json());
+// Capture the raw request body alongside JSON parsing — the Paystack webhook needs the exact
+// bytes (not a re-serialized object) to verify Paystack's HMAC signature.
+app.use(express.json({
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 
 // Unauthenticated, unrate-limited so load balancers/orchestrators can probe liveness freely.
 app.get('/health', async (_req, res) => {
@@ -95,6 +100,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/hotels', hotelsRouter);
 app.use('/api/email-config', authenticate, emailConfigRouter);
+app.use('/api/subscriptions/paystack-webhook', paystackWebhookRouter);
 app.use('/api/subscriptions', authenticate, subscriptionsRouter);
 app.use('/api/currencies', currenciesRouter);
 app.use('/api/api-keys', authenticate, apiKeysRouter);

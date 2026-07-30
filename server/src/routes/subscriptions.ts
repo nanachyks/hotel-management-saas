@@ -7,6 +7,36 @@ import { initializeTransaction, verifyTransaction, isConfigured } from '../servi
 export const subscriptionsRouter = Router();
 const db = getDb();
 
+// Shared by /verify-payment (browser redirect flow) and the Paystack webhook (server-to-server) —
+// both need to mark a pending payment as paid and (re)activate the hotel's subscription.
+export async function activateSubscriptionForPayment(payment: any): Promise<void> {
+  const periodEnd = new Date();
+  if (payment.billing_interval === 'yearly') {
+    periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+  } else {
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+  }
+
+  const existing = await db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [payment.hotel_id]);
+  if (existing) {
+    await db.execute(
+      `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = NOW() WHERE hotel_id = ?`,
+      [payment.plan_id, payment.billing_interval, periodEnd.toISOString().split('T')[0], payment.hotel_id]
+    );
+  } else {
+    await db.execute(
+      `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, current_period_starts_at, current_period_ends_at)
+       VALUES (?, ?, ?, ?, 'active', NOW(), ?)`,
+      [uuid(), payment.hotel_id, payment.plan_id, payment.billing_interval, periodEnd.toISOString().split('T')[0]]
+    );
+  }
+
+  await db.execute(
+    `UPDATE subscription_payments SET status = 'success', paid_at = NOW() WHERE id = ?`,
+    [payment.id]
+  );
+}
+
 subscriptionsRouter.use(authenticate);
 
 subscriptionsRouter.get('/plans', async (_req: AuthRequest, res: Response) => {
@@ -172,34 +202,15 @@ subscriptionsRouter.post('/verify-payment', async (req: AuthRequest, res: Respon
       res.status(404).json({ error: 'Payment record not found' });
       return;
     }
+    if (payment.hotel_id !== String(hotelId)) {
+      res.status(403).json({ error: 'This payment does not belong to your hotel' });
+      return;
+    }
 
     if (verification.status === 'success') {
-      // Activate subscription
-      const periodEnd = new Date();
-      if (payment.billing_interval === 'yearly') {
-        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-      } else {
-        periodEnd.setMonth(periodEnd.getMonth() + 1);
+      if (payment.status !== 'success') {
+        await activateSubscriptionForPayment(payment);
       }
-
-      const existing = await db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [String(hotelId)]);
-      if (existing) {
-        await db.execute(
-          `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = NOW() WHERE hotel_id = ?`,
-          [payment.plan_id, payment.billing_interval, periodEnd.toISOString().split('T')[0], String(hotelId)]
-        );
-      } else {
-        await db.execute(
-          `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, current_period_starts_at, current_period_ends_at)
-           VALUES (?, ?, ?, ?, 'active', NOW(), ?)`,
-          [uuid(), String(hotelId), payment.plan_id, payment.billing_interval, periodEnd.toISOString().split('T')[0]]
-        );
-      }
-
-      await db.execute(
-        `UPDATE subscription_payments SET status = 'success', paid_at = NOW() WHERE id = ?`,
-        [payment.id]
-      );
 
       const plan = await db.queryOne('SELECT name FROM subscription_plans WHERE id = ?', [payment.plan_id]);
       res.json({ success: true, message: `Subscribed to ${plan?.name || 'plan'} successfully!` });
@@ -226,62 +237,9 @@ subscriptionsRouter.get('/paystack-callback', (req: AuthRequest, res: Response) 
   }
 });
 
-// Paystack webhook (server-to-server notification)
-subscriptionsRouter.post('/paystack-webhook', async (req: AuthRequest | any, res: Response) => {
-  const event = req.body;
-
-  if (event.event === 'charge.success') {
-    const { reference, metadata } = event.data;
-    const hotelId = metadata?.hotel_id;
-    const planId = metadata?.plan_id;
-    const interval = metadata?.billing_interval;
-
-    if (hotelId && planId && reference) {
-      // Check if already processed
-      const existing = await db.queryOne(
-        'SELECT id FROM subscription_payments WHERE paystack_reference = ? AND status = ?',
-        [reference, 'success']
-      );
-
-      if (!existing) {
-        const payment = await db.queryOne(
-          'SELECT * FROM subscription_payments WHERE paystack_reference = ?',
-          [reference]
-        );
-
-        if (payment) {
-          const periodEnd = new Date();
-          if (interval === 'yearly') {
-            periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-          } else {
-            periodEnd.setMonth(periodEnd.getMonth() + 1);
-          }
-
-          const subExisting = await db.queryOne('SELECT id FROM hotel_subscriptions WHERE hotel_id = ?', [hotelId]);
-          if (subExisting) {
-            await db.execute(
-              `UPDATE hotel_subscriptions SET plan_id = ?, billing_interval = ?, status = 'active', current_period_ends_at = ?, updated_at = NOW() WHERE hotel_id = ?`,
-              [planId, interval, periodEnd.toISOString().split('T')[0], hotelId]
-            );
-          } else {
-            await db.execute(
-              `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, current_period_starts_at, current_period_ends_at)
-               VALUES (?, ?, ?, ?, 'active', NOW(), ?)`,
-              [uuid(), hotelId, planId, interval, periodEnd.toISOString().split('T')[0]]
-            );
-          }
-
-          await db.execute(
-            `UPDATE subscription_payments SET status = 'success', paid_at = NOW() WHERE id = ?`,
-            [payment.id]
-          );
-        }
-      }
-    }
-  }
-
-  res.sendStatus(200);
-});
+// Paystack webhook lives in its own unauthenticated router (see paystackWebhook.ts) — Paystack's
+// servers call it with no user JWT, and subscriptionsRouter requires authenticate for everything
+// mounted here.
 
 subscriptionsRouter.post('/cancel', async (req: AuthRequest, res: Response) => {
   const hotelId = req.user?.hotel_id;

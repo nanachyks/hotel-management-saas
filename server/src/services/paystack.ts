@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
 const BASE = 'https://api.paystack.co';
 
@@ -75,4 +77,16 @@ export async function verifyTransaction(reference: string): Promise<VerifyTransa
 
 export function isConfigured(): boolean {
   return PAYSTACK_SECRET.length > 0 && PAYSTACK_SECRET !== 'sk_test_your_key_here';
+}
+
+// Paystack signs webhook payloads with HMAC-SHA512 of the raw request body, keyed with the
+// secret key. Verifying this is the only thing standing between this endpoint and anyone on
+// the internet POSTing a fake "charge.success" event to grant themselves a subscription.
+export function verifyWebhookSignature(rawBody: Buffer, signature: string | string[] | undefined): boolean {
+  if (!signature || typeof signature !== 'string' || !PAYSTACK_SECRET) return false;
+  const hash = crypto.createHmac('sha512', PAYSTACK_SECRET).update(rawBody).digest('hex');
+  const hashBuf = Buffer.from(hash);
+  const sigBuf = Buffer.from(signature);
+  if (hashBuf.length !== sigBuf.length) return false;
+  return crypto.timingSafeEqual(hashBuf, sigBuf);
 }
