@@ -37,12 +37,11 @@ describe('GET /api/users', () => {
     expect(res.body.length).toBe(3);
   });
 
-  it('should list users for owner', async () => {
+  it('should return 403 for owner — user management is admin-only', async () => {
     const res = await request(app)
       .get('/api/users')
       .set('Authorization', `Bearer ${ownerToken}`);
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBe(3);
+    expect(res.status).toBe(403);
   });
 
   it('should return 403 for receptionist', async () => {

@@ -15,6 +15,38 @@ const EXCLUSION_VIOLATION = '23P01';
 
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a date in YYYY-MM-DD format');
 
+// Shared booking primitives, reused by the WordPress-plugin API (below, keyed
+// by API key) and the public hotel website (site.ts, keyed by hotel slug).
+
+export async function listAvailableRooms(
+  hotelId: string,
+  checkIn: string,
+  checkOut: string,
+  roomTypeId?: string
+) {
+  if (checkOut <= checkIn) return [];
+  let query = `
+    SELECT r.id, r.room_number, rt.id as room_type_id, rt.name as room_type_name, rt.base_price, rt.capacity
+    FROM rooms r
+    JOIN room_types rt ON r.room_type_id = rt.id
+    WHERE r.hotel_id = ? AND r.status != 'maintenance'
+    AND NOT EXISTS (
+      SELECT 1 FROM bookings b
+      WHERE b.room_id = r.id AND b.status IN ('confirmed', 'checked_in', 'pending')
+      AND b.check_in_date < ? AND b.check_out_date > ?
+    )
+  `;
+  const params: string[] = [hotelId, checkOut, checkIn];
+  if (roomTypeId) {
+    query += ' AND rt.id = ?';
+    params.push(roomTypeId);
+  }
+  query += ' ORDER BY rt.base_price ASC';
+  return db.queryAll(query, params);
+}
+
+// ── Public API (API-key authenticated — used by the WordPress plugin) ──
+
 // List room types available for public booking display
 publicRouter.get('/room-types', requireApiPermission('read'), async (req: ApiKeyRequest, res: Response) => {
   const roomTypes = await db.queryAll(
@@ -41,25 +73,7 @@ publicRouter.get('/availability', requireApiPermission('read'), async (req: ApiK
     return res.status(400).json({ error: 'check_out must be after check_in' });
   }
 
-  let query = `
-    SELECT r.id, r.room_number, rt.id as room_type_id, rt.name as room_type_name, rt.base_price, rt.capacity
-    FROM rooms r
-    JOIN room_types rt ON r.room_type_id = rt.id
-    WHERE r.hotel_id = ? AND r.status != 'maintenance'
-    AND NOT EXISTS (
-      SELECT 1 FROM bookings b
-      WHERE b.room_id = r.id AND b.status IN ('confirmed', 'checked_in', 'pending')
-      AND b.check_in_date < ? AND b.check_out_date > ?
-    )
-  `;
-  const params: string[] = [req.apiKeyAuth!.hotelId, check_out, check_in];
-  if (room_type_id) {
-    query += ' AND rt.id = ?';
-    params.push(room_type_id);
-  }
-  query += ' ORDER BY rt.base_price ASC';
-
-  const rooms = await db.queryAll(query, params);
+  const rooms = await listAvailableRooms(req.apiKeyAuth!.hotelId, check_in, check_out, room_type_id);
   res.json(rooms);
 });
 
@@ -79,38 +93,32 @@ const publicBookingSchema = z.object({
   callback_url: z.string().url().optional(),
 });
 
-// Create a pending booking from an external channel (e.g. the WordPress plugin) and start
-// a Paystack transaction for it. The booking is only confirmed once the guest actually pays
-// (see confirmBookingPayment, invoked from the Paystack webhook). A pending booking still
-// holds the room — see the no_overlapping_bookings exclusion constraint — for pending_expires_at
-// (set below), after which the sweeper (jobs/expirePendingBookings.ts) cancels it and frees
-// the room for someone else.
-publicRouter.post('/bookings', requireApiPermission('write'), validate(publicBookingSchema), async (req: ApiKeyRequest, res: Response) => {
-  const hotelId = req.apiKeyAuth!.hotelId;
-  const { room_type_id, check_in_date, check_out_date, guest, callback_url } = req.body;
+export interface OnlineBookingInput {
+  room_type_id: string;
+  check_in_date: string;
+  check_out_date: string;
+  guest: { first_name: string; last_name: string; email: string; phone: string };
+  callback_url?: string;
+}
 
+export async function createPendingBooking(
+  hotelId: string,
+  { room_type_id, check_in_date, check_out_date, guest, callback_url }: OnlineBookingInput
+): Promise<{ status: number; body: any }> {
   if (check_out_date <= check_in_date) {
-    return res.status(400).json({ error: 'check_out_date must be after check_in_date' });
+    return { status: 400, body: { error: 'check_out_date must be after check_in_date' } };
   }
 
   if (!isConfigured()) {
-    return res.status(500).json({ error: 'Payment gateway not configured. Set PAYSTACK_SECRET_KEY in server/.env' });
+    return { status: 500, body: { error: 'Payment gateway not configured. Set PAYSTACK_SECRET_KEY in server/.env' } };
   }
 
   const roomType = await db.queryOne('SELECT * FROM room_types WHERE id = ? AND hotel_id = ?', [room_type_id, hotelId]);
-  if (!roomType) return res.status(400).json({ error: 'Room type not found' });
+  if (!roomType) return { status: 400, body: { error: 'Room type not found' } };
 
-  const room = await db.queryOne(`
-    SELECT r.* FROM rooms r
-    WHERE r.hotel_id = ? AND r.room_type_id = ? AND r.status != 'maintenance'
-    AND NOT EXISTS (
-      SELECT 1 FROM bookings b
-      WHERE b.room_id = r.id AND b.status IN ('confirmed', 'checked_in', 'pending')
-      AND b.check_in_date < ? AND b.check_out_date > ?
-    )
-    ORDER BY r.room_number ASC LIMIT 1
-  `, [hotelId, room_type_id, check_out_date, check_in_date]);
-  if (!room) return res.status(400).json({ error: 'No rooms of this type are available for the selected dates' });
+  const available = await listAvailableRooms(hotelId, check_in_date, check_out_date, room_type_id);
+  const room = available.find(r => r.room_type_id === room_type_id) ?? null;
+  if (!room) return { status: 400, body: { error: 'No rooms of this type are available for the selected dates' } };
 
   let existingGuest = await db.queryOne('SELECT id FROM guests WHERE email = ? AND hotel_id = ?', [guest.email, hotelId]);
   let guestId: string;
@@ -156,7 +164,7 @@ publicRouter.post('/bookings', requireApiPermission('write'), validate(publicBoo
       metadata: { hotel_id: hotelId, booking_id: bookingId, type: 'booking' },
     });
   } catch (err: any) {
-    return res.status(502).json({ error: err.message || 'Payment initialization failed' });
+    return { status: 502, body: { error: err.message || 'Payment initialization failed' } };
   }
 
   await db.execute(
@@ -165,20 +173,34 @@ publicRouter.post('/bookings', requireApiPermission('write'), validate(publicBoo
     [uuid(), hotelId, bookingId, totalAmount, payment.reference, payment.access_code]
   );
 
-  res.status(201).json({
-    booking_id: bookingId,
-    room_number: room.room_number,
-    room_type: roomType.name,
-    check_in_date,
-    check_out_date,
-    nights,
-    total_amount: totalAmount,
-    status: 'pending',
-    payment: {
-      authorization_url: payment.authorization_url,
-      reference: payment.reference,
+  return {
+    status: 201,
+    body: {
+      booking_id: bookingId,
+      room_number: room.room_number,
+      room_type: roomType.name,
+      check_in_date,
+      check_out_date,
+      nights,
+      total_amount: totalAmount,
+      status: 'pending',
+      payment: {
+        authorization_url: payment.authorization_url,
+        reference: payment.reference,
+      },
     },
-  });
+  };
+}
+
+// Create a pending booking from an external channel (e.g. the WordPress plugin) and start
+// a Paystack transaction for it. The booking is only confirmed once the guest actually pays
+// (see confirmBookingPayment, invoked from the Paystack webhook). A pending booking still
+// holds the room — see the no_overlapping_bookings exclusion constraint — for pending_expires_at
+// (set inside createPendingBooking), after which the sweeper (jobs/expirePendingBookings.ts)
+// cancels it and frees the room for someone else.
+publicRouter.post('/bookings', requireApiPermission('write'), validate(publicBookingSchema), async (req: ApiKeyRequest, res: Response) => {
+  const { status, body } = await createPendingBooking(req.apiKeyAuth!.hotelId, req.body);
+  return res.status(status).json(body);
 });
 
 // Shared by the Paystack webhook to confirm a guest booking once its payment succeeds.

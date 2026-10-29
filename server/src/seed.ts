@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { initDb, getDb } from './db.js';
 
 async function seed() {
@@ -68,12 +69,13 @@ async function seed() {
     );
   }
 
-  // Subscription plans
+  // Subscription plans — keep in sync with migrations/0007_default_subscription_plans.sql
+  // Prices in GHS (cedis); yearly = 10x monthly (2 months free).
   const plans = [
     { id: uuid(), name: 'Free Trial', slug: 'free_trial', description: 'Get started with basic hotel management features. Perfect for testing the platform.', price_monthly: 0, price_yearly: 0, max_rooms: 5, max_users: 2, features: JSON.stringify(['Up to 5 rooms', 'Up to 2 users', 'Basic dashboard', 'Manual bookings', 'Email support']), highlighted: false, sort_order: 1 },
-    { id: uuid(), name: 'Basic', slug: 'basic', description: 'Essential tools for small hotels and B&Bs to manage daily operations.', price_monthly: 29, price_yearly: 290, max_rooms: 20, max_users: 5, features: JSON.stringify(['Up to 20 rooms', 'Up to 5 users', 'Dashboard & reports', 'Online bookings', 'Guest management', 'Invoice generation', 'Email support']), highlighted: false, sort_order: 2 },
-    { id: uuid(), name: 'Professional', slug: 'professional', description: 'Complete solution for growing hotels with advanced features and integrations.', price_monthly: 79, price_yearly: 790, max_rooms: 100, max_users: 20, features: JSON.stringify(['Up to 100 rooms', 'Up to 20 users', 'Advanced analytics', 'Housekeeping module', 'Maintenance tracking', 'Room service management', 'Staff scheduling', 'Export reports (CSV/PDF)', 'Priority email support']), highlighted: true, sort_order: 3 },
-    { id: uuid(), name: 'Enterprise', slug: 'enterprise', description: 'Unlimited everything with dedicated support and custom integrations for large properties.', price_monthly: 199, price_yearly: 1990, max_rooms: 9999, max_users: 9999, features: JSON.stringify(['Unlimited rooms', 'Unlimited users', 'All Professional features', 'API access', 'Multi-property management', 'Custom integrations', 'Dedicated account manager', 'Phone & priority support', 'SLA guarantee']), highlighted: false, sort_order: 4 },
+    { id: uuid(), name: 'Guesthouse', slug: 'basic', description: 'Essential tools for guesthouses and small hotels to manage daily operations.', price_monthly: 250, price_yearly: 2500, max_rooms: 15, max_users: 5, features: JSON.stringify(['Up to 15 rooms', 'Up to 5 users', 'Front desk & bookings', 'Housekeeping tracker', 'Own booking website', 'WhatsApp support']), highlighted: false, sort_order: 2 },
+    { id: uuid(), name: 'Hotel', slug: 'professional', description: 'Complete solution for hotels that want to grow — payments, payroll and reports included.', price_monthly: 500, price_yearly: 5000, max_rooms: 50, max_users: 20, features: JSON.stringify(['Up to 50 rooms', 'Up to 20 users', 'Everything in Guesthouse', 'Mobile money & card payments', 'Payroll & staff management', 'Full reports & exports', 'Priority WhatsApp support']), highlighted: true, sort_order: 3 },
+    { id: uuid(), name: 'Group', slug: 'enterprise', description: 'Multiple properties under one account, with dedicated support.', price_monthly: 1500, price_yearly: 15000, max_rooms: 9999, max_users: 9999, features: JSON.stringify(['Multiple properties', 'Everything in Hotel', 'Multi-property dashboard', 'Corporate & franchise clients', 'White-label branding', 'Dedicated account manager']), highlighted: false, sort_order: 4 },
   ];
 
   for (const p of plans) {
@@ -209,6 +211,19 @@ async function seed() {
     { guest_id: guest3Id, room_id: rooms[12].id, check_in: past(7), check_out: past(5), source: 'online', status: 'cancelled' },
     { guest_id: guest4Id, room_id: rooms[14].id, check_in: future(7), check_out: future(10), source: 'walk_in', status: 'pending' },
   ];
+
+  // Occupancy tracker — mirrors the no_overlapping_bookings DB constraint
+  // (migration 0004): confirmed/checked_in bookings hold their room, so the
+  // random historical generator below must not double-book a room.
+  const occupied = new Map<string, Array<{ in: string; out: string }>>();
+  for (const b of sampleBookings) {
+    if (b.status === 'confirmed' || b.status === 'checked_in') {
+      if (!occupied.has(b.room_id)) occupied.set(b.room_id, []);
+      occupied.get(b.room_id)!.push({ in: b.check_in, out: b.check_out });
+    }
+  }
+  const isOccupied = (roomId: string, ci: Date, co: Date) =>
+    (occupied.get(roomId) || []).some(iv => ci < new Date(iv.out) && new Date(iv.in) < co);
 
   for (const b of sampleBookings) {
     const roomData = rooms.find(r => r.id === b.room_id)!;
@@ -430,14 +445,28 @@ async function seed() {
     // 2-4 bookings per month
     const numBookings = 2 + Math.floor(Math.random() * 3);
     for (let b = 0; b < numBookings; b++) {
-      const checkInDay = 1 + Math.floor(Math.random() * (daysInMonth - 3));
-      const stay = 1 + Math.floor(Math.random() * 5);
-      const checkIn = new Date(m.getFullYear(), m.getMonth(), checkInDay);
-      const checkOut = new Date(m.getFullYear(), m.getMonth(), checkInDay + stay);
       const guest = allGuests[Math.floor(Math.random() * allGuests.length)];
-      const room = allRooms[Math.floor(Math.random() * allRooms.length)];
       const source = sources[Math.floor(Math.random() * sources.length)];
-      const total = stay * room.base_price;
+
+      // Draw dates/room until the room is actually free — the
+      // no_overlapping_bookings constraint rejects double-booked
+      // confirmed/checked_in stays, so pre-check like the API does.
+      let checkIn = new Date(m.getFullYear(), m.getMonth(), 1);
+      let checkOut = new Date(m.getFullYear(), m.getMonth(), 2);
+      let room: { id: string; base_price: number } = allRooms[0];
+      let fits = false;
+      for (let attempt = 0; attempt < 20 && !fits; attempt++) {
+        const checkInDay = 1 + Math.floor(Math.random() * (daysInMonth - 3));
+        const stay = 1 + Math.floor(Math.random() * 5);
+        checkIn = new Date(m.getFullYear(), m.getMonth(), checkInDay);
+        checkOut = new Date(m.getFullYear(), m.getMonth(), checkInDay + stay);
+        room = allRooms[Math.floor(Math.random() * allRooms.length)];
+        fits = !isOccupied(room.id, checkIn, checkOut);
+      }
+      if (!fits) continue; // room was full the whole month — skip this draw
+
+      const stay2 = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86400000));
+      const total = stay2 * room.base_price;
 
       const isPast = checkOut < today;
       const isFuture = checkIn > today;
@@ -457,6 +486,12 @@ async function seed() {
         [bid, hotelId, guest.id, room.id, fmt(checkIn), fmt(checkOut), total, source, status, fmt(checkIn)]
       );
       histBookings++;
+
+      if (status === 'confirmed' || status === 'checked_in') {
+        const list = occupied.get(room.id) || [];
+        list.push({ in: fmt(checkIn), out: fmt(checkOut) });
+        occupied.set(room.id, list);
+      }
 
       // Invoice for checked_out bookings
       if (status === 'checked_out') {
@@ -556,9 +591,11 @@ async function seed() {
   );
   const apiKeyRaw = 'he_' + Array.from({length:48},()=>'abcdef0123456789'[Math.floor(Math.random()*16)]).join('');
   const apiSecretRaw = Array.from({length:64},()=>'abcdef0123456789'[Math.floor(Math.random()*16)]).join('');
+  // api_keys stores only a sha256 hash since migration 0005 — never the raw secret.
+  const apiSecretHash = crypto.createHash('sha256').update(apiSecretRaw).digest('hex');
   await db.execute(
-    'INSERT INTO api_keys (id, hotel_id, name, key, secret, permissions, ip_whitelist, rate_limit) VALUES (?,?,?,?,?,?,?,?)',
-    [uuid(), hotelId, 'Production App', apiKeyRaw, apiSecretRaw, '["read","write"]', '["192.168.1.0/24"]', 500]
+    'INSERT INTO api_keys (id, hotel_id, name, key, secret_hash, permissions, ip_whitelist, rate_limit) VALUES (?,?,?,?,?,?,?,?)',
+    [uuid(), hotelId, 'Production App', apiKeyRaw, apiSecretHash, '["read","write"]', '["192.168.1.0/24"]', 500]
   );
   await db.execute(
     'INSERT INTO white_label_settings (id, hotel_id, primary_color, footer_text) VALUES (?,?,?,?)',

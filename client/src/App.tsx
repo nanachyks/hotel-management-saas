@@ -8,12 +8,15 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleBasedRoute from './components/RoleBasedRoute';
+import Landing from './pages/Landing';
+import PublicSite from './pages/PublicSite';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import CheckEmail from './pages/CheckEmail';
 import VerifyEmail from './pages/VerifyEmail';
+import Locked from './pages/Locked';
 import NotFound from './pages/NotFound';
 import Dashboard from './pages/Dashboard';
 import Rooms from './pages/Rooms';
@@ -47,6 +50,25 @@ import WhiteLabel from './pages/WhiteLabel';
 import Enterprise from './pages/Enterprise';
 import Channels from './pages/Channels';
 
+// Software-configuration pages — admin-only. Owner and lower roles keep full
+// oversight of operations and money, but not of the system itself.
+const ADMIN_ONLY_ROUTES = (
+  <Route element={<RoleBasedRoute allowedRoles={['admin']} />}>
+    <Route path="/users" element={<Users />} />
+    <Route path="/roles" element={<Roles />} />
+    <Route path="/api-keys" element={<ApiKeys />} />
+    <Route path="/integrations" element={<Integrations />} />
+    <Route path="/channels" element={<Channels />} />
+    <Route path="/white-label" element={<WhiteLabel />} />
+    <Route path="/hotel" element={<HotelSetup />} />
+    {/* Business modules — the subscription unlocks these for the paying admin */}
+    <Route path="/subscriptions" element={<Subscriptions />} />
+    <Route path="/corporate" element={<Corporate />} />
+    <Route path="/franchise" element={<Franchise />} />
+    <Route path="/enterprise" element={<Enterprise />} />
+  </Route>
+);
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -57,13 +79,16 @@ export default function App() {
         <NotificationProvider>
         <ToastProvider>
         <Routes>
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/check-email" element={<CheckEmail />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/locked" element={<Locked />} />
           <Route path="/payment-callback" element={<PaymentCallback />} />
+          <Route path="/stay/:slug" element={<PublicSite />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -76,29 +101,20 @@ export default function App() {
               <Route path="/guests" element={<Guests />} />
               <Route path="/invoices" element={<Invoices />} />
               <Route path="/services" element={<Services />} />
-               <Route path="/expenses" element={<Expenses />} />
-               <Route path="/inventory" element={<Inventory />} />
-               <Route path="/reports" element={<Reports />} />
+              <Route path="/expenses" element={<Expenses />} />
+              <Route path="/inventory" element={<Inventory />} />
+              <Route path="/reports" element={<Reports />} />
               <Route path="/housekeeping" element={<Housekeeping />} />
               <Route path="/maintenance" element={<Maintenance />} />
               <Route path="/room-service" element={<RoomService />} />
               <Route path="/staff" element={<Staff />} />
-               <Route path="/notifications" element={<Notifications />} />
-               <Route path="/ai" element={<AIInsights />} />
-               <Route path="/payroll" element={<Payroll />} />
-               <Route path="/integrations" element={<Integrations />} />
-               <Route path="/subscriptions" element={<Subscriptions />} />
-              <Route element={<RoleBasedRoute allowedRoles={['admin', 'owner']} />}>
-                <Route path="/users" element={<Users />} />
-              </Route>
-              <Route path="/hotel" element={<HotelSetup />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/ai" element={<AIInsights />} />
+              <Route path="/payroll" element={<Payroll />} />
               <Route path="/corporate" element={<Corporate />} />
               <Route path="/franchise" element={<Franchise />} />
-              <Route path="/roles" element={<Roles />} />
-              <Route path="/api-keys" element={<ApiKeys />} />
-              <Route path="/white-label" element={<WhiteLabel />} />
               <Route path="/enterprise" element={<Enterprise />} />
-              <Route path="/channels" element={<Channels />} />
+              {ADMIN_ONLY_ROUTES}
             </Route>
           </Route>
           <Route path="*" element={<NotFound />} />

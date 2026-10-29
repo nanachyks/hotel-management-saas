@@ -2,11 +2,14 @@ import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 const db = getDb();
 
+// Corporate accounts (direct-billing clients) are a business module the
+// subscription covers — managed by admin, not staff.
 const router = Router();
+router.use(requireRole('admin'));
 
 const createCorporateSchema = z.object({
   company_name: z.string().min(1, 'Company name is required'),

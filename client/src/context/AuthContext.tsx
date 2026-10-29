@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 
 interface User {
   id: string; username: string; name: string; email: string; role: string; hotel_id: string;
+  is_demo?: boolean;
 }
 
 interface AuthContextType {

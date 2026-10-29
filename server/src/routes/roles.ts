@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate.js';
 const db = getDb();
 
 const router = Router();
-router.use(requireRole('admin', 'owner'));
+router.use(requireRole('admin'));
 
 const createRoleSchema = z.object({
   name: z.string().min(1, 'Role name is required'),

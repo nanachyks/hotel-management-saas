@@ -19,7 +19,8 @@ currenciesRouter.get('/rates', async (req: AuthRequest, res: Response) => {
 
 // These write global, platform-wide reference data shared by every tenant —
 // restrict to admin/owner rather than any authenticated user.
-currenciesRouter.put('/rates', requireRole('admin', 'owner'), async (req: AuthRequest, res: Response) => {
+// Only admins may edit exchange rates — it is hotel-wide pricing configuration.
+currenciesRouter.put('/rates', requireRole('admin'), async (req: AuthRequest, res: Response) => {
   const { rates } = req.body;
   if (!Array.isArray(rates)) return res.status(400).json({ error: 'rates array required' });
 
@@ -34,7 +35,7 @@ currenciesRouter.put('/rates', requireRole('admin', 'owner'), async (req: AuthRe
   res.json({ message: 'Exchange rates updated' });
 });
 
-currenciesRouter.post('/seed', requireRole('admin', 'owner'), async (req: AuthRequest, res: Response) => {
+currenciesRouter.post('/seed', requireRole('admin'), async (req: AuthRequest, res: Response) => {
   const initial = [
     { code: 'GHS', name: 'Ghana Cedi', symbol: 'GHs' },
     { code: 'USD', name: 'US Dollar', symbol: '$' },

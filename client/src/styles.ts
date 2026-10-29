@@ -96,7 +96,7 @@ export const tableCell: CSSProperties = {
 export const currencySymbols: Record<string, string> = { GHS: 'GHS', USD: '$', NGN: 'NGN', EUR: 'EUR', GBP: 'GBP' };
 
 export function getCurrencySymbol(code?: string): string {
-  const saved = typeof window !== 'undefined' ? localStorage.getItem('displayCurrency') : null;
+  const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('displayCurrency') : null;
   const cur = code || saved || 'GHS';
   return currencySymbols[cur] || cur;
 }

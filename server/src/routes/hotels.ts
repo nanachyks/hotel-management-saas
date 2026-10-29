@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import crypto from 'crypto';
 import { getDb } from '../db.js';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { authenticate, AuthRequest, requireRole } from '../middleware/auth.js';
 import { sendEmailVerification } from '../services/email.js';
 import { getPlanLimits } from './subscriptions.js';
 
@@ -41,7 +41,8 @@ hotelsRouter.get('/settings', async (req: AuthRequest, res: Response) => {
   res.json(hotel);
 });
 
-hotelsRouter.put('/settings', async (req: AuthRequest, res: Response) => {
+// Changing hotel settings is admin configuration — staff (incl. owner) can view.
+hotelsRouter.put('/settings', requireRole('admin'), async (req: AuthRequest, res: Response) => {
   const { name, email, phone, address, logo_url, currency, tax_rate, timezone, check_in_time, check_out_time } = req.body;
   await db.execute(
     `UPDATE hotels SET name = ?, email = ?, phone = ?, address = ?, logo_url = ?, currency = ?, tax_rate = ?, timezone = ?, check_in_time = ?, check_out_time = ?, updated_at = NOW() WHERE id = ?`,
@@ -59,7 +60,8 @@ hotelsRouter.get('/invitations', async (req: AuthRequest, res: Response) => {
   res.json(invitations);
 });
 
-hotelsRouter.post('/invitations', async (req: AuthRequest, res: Response) => {
+// Inviting staff members is user management — admin-only (same policy as /api/users).
+hotelsRouter.post('/invitations', requireRole('admin'), async (req: AuthRequest, res: Response) => {
   const { email, role } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
@@ -95,7 +97,7 @@ hotelsRouter.post('/invitations', async (req: AuthRequest, res: Response) => {
   res.status(201).json({ message: 'Invitation sent', id, email, role: role || 'receptionist' });
 });
 
-hotelsRouter.delete('/invitations/:id', async (req: AuthRequest, res: Response) => {
+hotelsRouter.delete('/invitations/:id', requireRole('admin'), async (req: AuthRequest, res: Response) => {
   const existing = await db.queryOne('SELECT id FROM hotel_invitations WHERE id = ? AND hotel_id = ?', [req.params.id, req.user!.hotel_id]);
   if (!existing) return res.status(404).json({ error: 'Invitation not found' });
   await db.execute('DELETE FROM hotel_invitations WHERE id = ?', [req.params.id]);

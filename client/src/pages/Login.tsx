@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { colors, input } from '../styles';
 import { Mail } from 'lucide-react';
@@ -7,8 +7,10 @@ import { Mail } from 'lucide-react';
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [searchParams] = useSearchParams();
+  const isDemo = searchParams.get('demo') === '1';
+  const [username, setUsername] = useState(isDemo ? 'demo.admin' : '');
+  const [password, setPassword] = useState(isDemo ? 'demo123' : '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);

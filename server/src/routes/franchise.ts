@@ -2,11 +2,14 @@ import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 const db = getDb();
 
+// Franchise groups are a business module the subscription covers —
+// managed by admin, not staff.
 const router = Router();
+router.use(requireRole('admin'));
 
 const createGroupSchema = z.object({
   name: z.string().min(1, 'Group name is required'),

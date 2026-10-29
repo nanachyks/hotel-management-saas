@@ -22,9 +22,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   }
 
   if (res.status === 402) {
+    // Subscription/trial lapsed. The /locked page is reachable by every role
+    // (unlike /subscriptions, which is admin-only) so owners and staff see a
+    // clear message instead of a redirect loop between forbidden routes.
     const err = await res.json().catch(() => ({ error: 'Subscription required' }));
-    if (window.location.pathname !== '/subscriptions') {
-      window.location.href = '/subscriptions';
+    if (window.location.pathname !== '/locked' && window.location.pathname !== '/subscriptions') {
+      window.location.href = '/locked';
     }
     throw new Error(err.error || 'Subscription required');
   }

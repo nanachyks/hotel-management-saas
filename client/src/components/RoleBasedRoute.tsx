@@ -26,6 +26,12 @@ export default function RoleBasedRoute({ allowedRoles, fallbackPath = '/dashboar
     return <Navigate to="/login" replace />;
   }
 
+  // Demo users are role "admin" but the demo only shows the operating tools —
+  // keep them out of the admin/config pages even when typed in by hand.
+  if (user.is_demo && allowedRoles.includes('admin')) {
+    return <Navigate to={fallbackPath} replace />;
+  }
+
   const userLevel = roleHierarchy[user.role] || 0;
   const minRequired = Math.max(...allowedRoles.map(r => roleHierarchy[r] || 0));
 

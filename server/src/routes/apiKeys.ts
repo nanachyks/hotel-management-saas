@@ -2,12 +2,16 @@ import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import crypto from 'crypto';
 const db = getDb();
 
 const router = Router();
+
+// API key management is sensitive configuration — admin-only. The router is
+// mounted behind `authenticate` in index.ts, so only the role check is needed here.
+router.use(requireRole('admin'));
 
 const createApiKeySchema = z.object({
   name: z.string().min(1, 'API key name is required'),

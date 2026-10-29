@@ -1,10 +1,15 @@
 import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db.js';
-import { AuthRequest, authenticate } from '../middleware/auth.js';
+import { AuthRequest, authenticate, requireRole } from '../middleware/auth.js';
 import { initializeTransaction, verifyTransaction, isConfigured } from '../services/paystack.js';
 
 export const subscriptionsRouter = Router();
+
+// Subscription & billing management belongs to the account that runs the
+// system (admin). The Paystack webhook route under /paystack-webhook is a
+// separate unauthenticated router, so it is unaffected.
+subscriptionsRouter.use(requireRole('admin'));
 const db = getDb();
 
 // Shared by /verify-payment (browser redirect flow) and the Paystack webhook (server-to-server) —

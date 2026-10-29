@@ -67,11 +67,22 @@ describe('Layout', () => {
     expect(screen.getByText('Users')).toBeInTheDocument();
   });
 
-  it('shows Users nav item for owner role', () => {
+  it('hides admin configuration nav items for owner role', () => {
     mockRole = 'owner';
     renderLayout();
     expandSidebar();
-    expect(screen.getByText('Users')).toBeInTheDocument();
+    expect(screen.queryByText('Users')).not.toBeInTheDocument();
+    expect(screen.queryByText('Roles')).not.toBeInTheDocument();
+    expect(screen.queryByText('API Keys')).not.toBeInTheDocument();
+    expect(screen.queryByText('Integrations')).not.toBeInTheDocument();
+    // Billing & business modules are admin territory too
+    expect(screen.queryByText('Subscriptions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Corporate')).not.toBeInTheDocument();
+    expect(screen.queryByText('Franchise')).not.toBeInTheDocument();
+    expect(screen.queryByText('Enterprise')).not.toBeInTheDocument();
+    // Owner keeps money oversight
+    expect(screen.getByText('Invoices')).toBeInTheDocument();
+    expect(screen.getByText('Payroll')).toBeInTheDocument();
   });
 
   it('hides Users nav item for receptionist role', () => {

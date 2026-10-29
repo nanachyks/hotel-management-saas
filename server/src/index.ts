@@ -9,6 +9,7 @@ import fs from 'fs';
 import rateLimit from 'express-rate-limit';
 import { initDb, getDb } from './db.js';
 import { startPendingBookingSweeper } from './jobs/expirePendingBookings.js';
+import { startDemoResetScheduler } from './jobs/demoReset.js';
 import { authenticate } from './middleware/auth.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
@@ -35,6 +36,7 @@ import { depositsRouter } from './routes/deposits.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
 import { paystackWebhookRouter } from './routes/paystackWebhook.js';
+import { siteRouter } from './routes/site.js';
 import { taxesRouter } from './routes/taxes.js';
 import { inventoryRouter } from './routes/inventory.js';
 import { currenciesRouter } from './routes/currencies.js';
@@ -51,6 +53,7 @@ import { channelsRouter } from './routes/channels.js';
 import { publicRouter } from './routes/public.js';
 import { authenticateApiKey } from './middleware/apiKeyAuth.js';
 import { requireActiveSubscription } from './middleware/subscriptionGate.js';
+import { blockDemoTenant, blockDemoTenantWrites } from './middleware/demoGuard.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -99,18 +102,24 @@ app.use('/api/', limiter);
 
 // Account/admin/config routes stay reachable even with a lapsed subscription, so a hotel can
 // always manage its account, staff, and billing well enough to renew.
+// The public demo tenant is walled off from the admin/config surface
+// (blockDemoTenant) so prospects only see the operating tools.
 app.use('/api/auth', authRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/hotels', hotelsRouter);
-app.use('/api/email-config', authenticate, emailConfigRouter);
+app.use('/api/users', authenticate, blockDemoTenant, usersRouter);
+app.use('/api/hotels', authenticate, blockDemoTenantWrites, hotelsRouter);
+app.use('/api/email-config', authenticate, blockDemoTenant, emailConfigRouter);
 app.use('/api/subscriptions/paystack-webhook', paystackWebhookRouter);
-app.use('/api/subscriptions', authenticate, subscriptionsRouter);
+app.use('/api/subscriptions', authenticate, blockDemoTenantWrites, subscriptionsRouter);
 app.use('/api/currencies', currenciesRouter);
-app.use('/api/api-keys', authenticate, apiKeysRouter);
-app.use('/api/white-label', authenticate, whiteLabelRouter);
-app.use('/api/enterprise', authenticate, enterpriseRouter);
-app.use('/api/roles', authenticate, rolesRouter);
+app.use('/api/api-keys', authenticate, blockDemoTenant, apiKeysRouter);
+app.use('/api/white-label', authenticate, blockDemoTenantWrites, whiteLabelRouter);
+app.use('/api/enterprise', authenticate, blockDemoTenant, enterpriseRouter);
+app.use('/api/roles', authenticate, blockDemoTenant, rolesRouter);
 app.use('/api/public', authenticateApiKey, publicRouter);
+// Public per-hotel booking website — slug-keyed, no secrets in the browser.
+// Mounted before the subscription gate section: a booking website must keep
+// working even if the hotel's own admin is in a lapsed-subscription renew.
+app.use('/api/site', siteRouter);
 
 // Core operational routes require an active (non-expired, non-cancelled) subscription.
 app.use('/api/room-types', authenticate, requireActiveSubscription, roomTypesRouter);
@@ -156,6 +165,8 @@ app.use(errorHandler);
 
 initDb().then(() => {
   startPendingBookingSweeper();
+  // Public demo tenant: create on boot if missing, reset it every day.
+  startDemoResetScheduler();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });

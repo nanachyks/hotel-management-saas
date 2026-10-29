@@ -2,10 +2,13 @@ import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db.js';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
 export const channelsRouter = Router();
+
+// Channel manager (OTA connections) is admin-managed configuration.
+channelsRouter.use(requireRole('admin'));
 
 const createChannelSchema = z.object({
   channel: z.string().min(1),

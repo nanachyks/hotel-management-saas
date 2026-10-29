@@ -2,11 +2,15 @@ import { Router, Response, NextFunction } from 'express';
 import { getDb } from '../db.js';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, requireRole } from '../middleware/auth.js';
+import { requireActiveSubscription } from '../middleware/subscriptionGate.js';
 import { validate } from '../middleware/validate.js';
 const db = getDb();
 
+// Enterprise (multi-hotel collection) is a business module the subscription
+// covers — managed by admin, not staff.
 const router = Router();
+router.use(requireRole('admin'));
 
 const createHotelSchema = z.object({
   name: z.string().min(1, 'Hotel name is required'),
@@ -36,7 +40,7 @@ const addTeamMemberSchema = z.object({
 // ── Multi-Property Management ──
 
 // Create a new hotel (property)
-router.post('/hotels', validate(createHotelSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/hotels', requireRole('admin'), requireActiveSubscription, validate(createHotelSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, address, phone, email, currency, timezone } = req.body;
     const id = uuid();
@@ -46,6 +50,19 @@ router.post('/hotels', validate(createHotelSchema), async (req: AuthRequest, res
     // Add creator as owner
     await db.execute('INSERT INTO hotel_members (id, hotel_id, user_id, role) VALUES (?,?,?,?)',
       [uuid(), id, req.user!.id, 'owner']);
+    // Give the new property its own 14-day trial so it is billing-gated like
+    // any sign-up tenant. (One shared invoice across all group properties is
+    // planned — right now each property bills/gates independently.)
+    const freePlan = await db.queryOne("SELECT id FROM subscription_plans WHERE slug = 'free_trial' LIMIT 1");
+    if (freePlan) {
+      const trialEndsAt = new Date();
+      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+      await db.execute(
+        `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, trial_ends_at, current_period_starts_at, current_period_ends_at)
+         VALUES (?, ?, ?, 'monthly', 'trial', ?, NOW(), ?)`,
+        [uuid(), id, freePlan.id, trialEndsAt.toISOString().split('T')[0], trialEndsAt.toISOString().split('T')[0]]
+      );
+    }
     res.json({ id, name });
   } catch (e: any) { next(e); }
 });

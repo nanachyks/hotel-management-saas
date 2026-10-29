@@ -8,7 +8,7 @@ import { passwordError } from '../utils/password.js';
 export const usersRouter = Router();
 const db = getDb();
 
-usersRouter.use(authenticate, requireRole('admin', 'owner'));
+usersRouter.use(authenticate, requireRole('admin'));
 
 usersRouter.get('/', async (req: AuthRequest, res: Response) => {
   const { page: pageStr, limit: limitStr } = req.query;

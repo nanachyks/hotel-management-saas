@@ -39,6 +39,8 @@ async function recordLoginAttempt(username: string, ip: string, success: boolean
   );
 }
 
+import { isDemoTenantId } from '../demoTenant.js';
+
 authRouter.post('/login', async (req: Request, res: Response) => {
   const { username, password } = req.body;
   if (!username || !password) {
@@ -86,7 +88,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   res.json({
     token,
     refreshToken,
-    user: { id: user.id, username: user.username, name: user.name, email: user.email, role: user.role, hotel_id: user.hotel_id },
+    user: { id: user.id, username: user.username, name: user.name, email: user.email, role: user.role, hotel_id: user.hotel_id, is_demo: await isDemoTenantId(user.hotel_id) },
   });
 });
 
@@ -145,9 +147,12 @@ authRouter.post('/register', async (req: Request, res: Response) => {
 
   const id = uuid();
   const password_hash = bcrypt.hashSync(password, 10);
+  // The account that signs up is the person who runs the system and pays for
+  // the subscription — the admin. Co-owners (money-only oversight) are added
+  // later as 'owner' role members.
   await db.execute(
     'INSERT INTO users (id, hotel_id, username, email, password_hash, name, role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, false)',
-    [id, hotelId, username, email, password_hash, name, 'owner']
+    [id, hotelId, username, email, password_hash, name, 'admin']
   );
 
   const verificationToken = crypto.randomBytes(32).toString('hex');
@@ -166,6 +171,21 @@ authRouter.post('/register', async (req: Request, res: Response) => {
        VALUES (?, ?, ?, 'monthly', 'trial', ?, NOW(), ?)`,
       [uuid(), hotelId, freePlan.id, trialEndsAt.toISOString().split('T')[0], trialEndsAt.toISOString().split('T')[0]]
     );
+  } else {
+    // Defensive fallback: every 14-day signup must get a gated subscription row.
+    // Plans are guaranteed by migration 0007, so this only fires if the table
+    // was tampered with — still attach a row (first plan) rather than leaving
+    // the hotel untracked by billing.
+    const anyPlan = await db.queryOne('SELECT id FROM subscription_plans ORDER BY sort_order ASC LIMIT 1');
+    if (anyPlan) {
+      const trialEndsAt = new Date();
+      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+      await db.execute(
+        `INSERT INTO hotel_subscriptions (id, hotel_id, plan_id, billing_interval, status, trial_ends_at, current_period_starts_at, current_period_ends_at)
+         VALUES (?, ?, ?, 'monthly', 'trial', ?, NOW(), ?)`,
+        [uuid(), hotelId, anyPlan.id, trialEndsAt.toISOString().split('T')[0], trialEndsAt.toISOString().split('T')[0]]
+      );
+    }
   }
 
   sendEmailVerification(email, { name, token: verificationToken });
@@ -275,6 +295,9 @@ authRouter.post('/resend-verification', async (req: Request, res: Response) => {
   res.json({ message: 'If the email exists, a verification link has been sent.' });
 });
 
-authRouter.get('/me', authenticate, (req: AuthRequest, res: Response) => {
-  res.json({ user: req.user });
+authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
+  // is_demo is resolved live (not baked into the JWT) so it survives refreshes
+  // without a token-shape change. Demo-guard middleware depends on it.
+  const isDemo = await isDemoTenantId(req.user?.hotel_id);
+  res.json({ user: { ...req.user, is_demo: isDemo } });
 });

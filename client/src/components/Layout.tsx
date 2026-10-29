@@ -62,6 +62,12 @@ export default function Layout() {
 
   const role = user?.role || '';
   const canManage = role === 'admin' || role === 'owner';
+  // Sensitive software configuration is visible to admins only — owner keeps
+  // full oversight of money and operations, but not of the system itself.
+  // The public demo tenant is limited to the operating tools: prospects see
+  // the core hotel workflow, not the billing/config surface.
+  const isDemoTenant = !!user?.is_demo;
+  const canAdmin = role === 'admin' && !isDemoTenant;
   const canViewFinance = role === 'admin' || role === 'owner' || role === 'manager' || role === 'accountant';
   const canViewServices = role === 'admin' || role === 'owner' || role === 'manager';
   const canViewGuests = role === 'admin' || role === 'owner' || role === 'manager' || role === 'receptionist';
@@ -85,17 +91,17 @@ export default function Layout() {
     ...(canViewOperations ? [{ to: '/maintenance' as const, label: 'Maintenance' }] : []),
     ...(canViewOperations ? [{ to: '/room-service' as const, label: 'Room Service' }] : []),
     ...(canViewOperations ? [{ to: '/staff' as const, label: 'Staff' }] : []),
-    ...(canManage ? [{ to: '/integrations' as const, label: 'Integrations' }] : []),
-    ...(canManage ? [{ to: '/users' as const, label: 'Users' }] : []),
-    ...(canManage ? [{ to: '/subscriptions' as const, label: 'Subscriptions' }] : []),
-    ...(canManage ? [{ to: '/hotel' as const, label: 'Hotel Setup' }] : []),
-    ...(canManage ? [{ to: '/corporate' as const, label: 'Corporate' }] : []),
-    ...(canManage ? [{ to: '/franchise' as const, label: 'Franchise' }] : []),
-    ...(canManage ? [{ to: '/roles' as const, label: 'Roles' }] : []),
-    ...(canManage ? [{ to: '/api-keys' as const, label: 'API Keys' }] : []),
-    ...(canManage ? [{ to: '/white-label' as const, label: 'White Label' }] : []),
-    ...(canManage ? [{ to: '/enterprise' as const, label: 'Enterprise' }] : []),
-    ...(canManage ? [{ to: '/channels' as const, label: 'Channels' }] : []),
+    ...(canAdmin ? [{ to: '/integrations' as const, label: 'Integrations' }] : []),
+    ...(canAdmin ? [{ to: '/users' as const, label: 'Users' }] : []),
+    ...(canAdmin ? [{ to: '/corporate' as const, label: 'Corporate' }] : []),
+    ...(canAdmin ? [{ to: '/franchise' as const, label: 'Franchise' }] : []),
+    ...(canAdmin ? [{ to: '/roles' as const, label: 'Roles' }] : []),
+    ...(canAdmin ? [{ to: '/hotel' as const, label: 'Hotel Setup' }] : []),
+    ...(canAdmin ? [{ to: '/api-keys' as const, label: 'API Keys' }] : []),
+    ...(canAdmin ? [{ to: '/white-label' as const, label: 'White Label' }] : []),
+    ...(canAdmin ? [{ to: '/enterprise' as const, label: 'Enterprise' }] : []),
+    ...(canAdmin ? [{ to: '/channels' as const, label: 'Channels' }] : []),
+    ...(canAdmin ? [{ to: '/subscriptions' as const, label: 'Subscriptions' }] : []),
   ];
 
   const handleLogout = () => {
@@ -211,7 +217,7 @@ export default function Layout() {
               </div>
             )}
           </div>
-          {expanded && (
+          {expanded && !isDemoTenant && (
             <div style={{ marginBottom: 12, position: 'relative' }}>
               <label style={{ display: 'block', fontSize: 11, color: colors.slate, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Brand Color</label>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

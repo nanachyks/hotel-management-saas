@@ -12,7 +12,7 @@ const roleHierarchy: Record<string, number> = {
   accountant: 3,
   manager: 4,
   owner: 5,
-  admin: 5,
+  admin: 6,
 };
 
 export const ROLES = {
@@ -64,8 +64,8 @@ export function requireRole(...roles: string[]) {
 }
 
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'owner')) {
-    return res.status(403).json({ error: 'Admin or owner access required' });
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
   }
   next();
 }

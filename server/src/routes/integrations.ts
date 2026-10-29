@@ -1,9 +1,11 @@
 import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../db.js';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, requireRole } from '../middleware/auth.js';
 
+// Integration providers (payment/OTA connectors) are admin-managed configuration.
 export const integrationsRouter = Router();
+integrationsRouter.use(requireRole('admin'));
 const db = getDb();
 
 const PROVIDERS: Record<string, string[]> = {
