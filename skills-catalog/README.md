@@ -26,10 +26,13 @@ Add the GitHub raw catalog URL to your `opencode.jsonc`:
 {
   "$schema": "https://opencode.ai/config.json",
   "skills": [
-    "https://raw.githubusercontent.com/nanachyks/hotel-management-saas/main/skills-catalog/"
+    "https://raw.githubusercontent.com/nanachyks/hotel-management-saas/migrate/postgres/skills-catalog/"
   ]
 }
 ```
+
+(Once this catalog folder is merged into `main`, switch the URL's branch to
+`main` to make it stable across branches.)
 
 OpenCode downloads `index.json` and fetches each listed file when needed.
 Bump `version` in `index.json` whenever the skill changes so OpenCode
