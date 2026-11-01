@@ -1,9 +1,0 @@
-{
-  "skills": [
-    {
-      "name": "flyer-to-psd",
-      "version": "1",
-      "files": ["SKILL.md", "scripts/jpeg2psd.py"]
-    }
-  ]
-}
